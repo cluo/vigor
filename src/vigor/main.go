@@ -6,7 +6,8 @@
 package main
 
 import (
-	_ "gofmt"
+	_ "format"
+
 	"github.com/garyburd/neovim-go/vim"
 )
 

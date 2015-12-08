@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package gofmt
+package format
 
 import (
 	"bytes"
@@ -16,21 +16,28 @@ var minUpdateTests = []struct {
 	in  string
 	out string
 }{
-	{"a b c", "a b c d"},
+	{"", ""},
 	{"a", "a"},
-	{"a b c", "a b c"},
+	{"a/b/c", "a/b/c"},
 
 	{"a", "x"},
-	{"a b c", "x y z"},
+	{"a/b/c", "x/y/z"},
 
-	{"a b c d", "a b c d"},
-	{"b c d", "a b c d"},
-	{"a b c", "a b c d"},
-	{"a d", "a b c d"},
+	{"a/b/c/d", "a/b/c/d"},
+	{"b/c/d", "a/b/c/d"},
+	{"a/b/c", "a/b/c/d"},
+	{"a/d", "a/b/c/d"},
+	{"a/b/c/d", "a/b/x/c/d"},
 
-	{"a b c d", "b c d"},
-	{"a b c d", "a b c"},
-	{"a b c d", "a d"},
+	{"a/b/c/d", "b/c/d"},
+	{"a/b/c/d", "a/b/c"},
+	{"a/b/c/d", "a/d"},
+
+	{"b/c/d", "//b/c/d"},
+	{"a/b/c", "a/b//c/d/"},
+	{"a/b/c", "a/b//c/d/"},
+	{"a/b/c/d", "a/b//c/d"},
+	{"a/b/c/d", "a/b///c/d"},
 }
 
 func TestMinUpdate(t *testing.T) {
@@ -43,8 +50,8 @@ func TestMinUpdate(t *testing.T) {
 	}
 
 	for _, tt := range minUpdateTests {
-		in := bytes.Split([]byte(tt.in), []byte{' '})
-		out := bytes.Split([]byte(tt.out), []byte{' '})
+		in := bytes.Split([]byte(tt.in), []byte{'/'})
+		out := bytes.Split([]byte(tt.out), []byte{'/'})
 
 		if err := v.SetBufferLineSlice(b, 0, -1, true, true, in); err != nil {
 			t.Fatal(err)
