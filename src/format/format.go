@@ -12,14 +12,13 @@ import (
 	"util"
 
 	"github.com/garyburd/neovim-go/vim"
+	"github.com/garyburd/neovim-go/vim/plugin"
 	"github.com/garyburd/neovim-go/vim/vimutil"
 	"golang.org/x/tools/imports"
 )
 
 func init() {
-	vim.RegisterPluginSetup(func(v *vim.Vim) error {
-		return v.RegisterCommand("Fmt", &vim.CommandOptions{Range: "%", Eval: "expand('%:p')"}, format)
-	})
+	plugin.HandleCommand("Fmt", &plugin.CommandOptions{Range: "%", Eval: "expand('%:p')"}, format)
 }
 
 var options = imports.Options{

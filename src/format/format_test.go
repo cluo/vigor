@@ -41,7 +41,7 @@ var minUpdateTests = []struct {
 }
 
 func TestMinUpdate(t *testing.T) {
-	v, cleanup := vimtest.New(t)
+	v, cleanup := vimtest.New(t, true)
 	defer cleanup()
 
 	b, err := v.CurrentBuffer()

@@ -2,8 +2,7 @@
 
 Vigor is a [Neovim](https://neovim.io/) plugin for writing Go programs.
 
-Vigor is a work in progress. More functionality and documentation is coming
-soon.
+Vigor is a work in progress. 
 
 ### Install
 
@@ -12,5 +11,5 @@ soon.
 1. Build src/vigor with gb.
 1. Start nvim and run :UpdateRemotePlugins
 
-You should now have the GoFmt command.
+You should now have the Fmt command.
 

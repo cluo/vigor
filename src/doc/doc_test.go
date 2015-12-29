@@ -2,16 +2,17 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Command nvimgo is a Neovim remote plogin.
-package main
+package doc
 
 import (
-	_ "doc"
-	_ "format"
-
-	"github.com/garyburd/neovim-go/vim/plugin"
+	"os"
+	"testing"
 )
 
-func main() {
-	plugin.Main()
+func TestDoc(t *testing.T) {
+	cwd, _ := os.Getwd()
+	_, _, err := print("x://net/http", cwd)
+	if err != nil {
+		t.Fatal(err)
+	}
 }
