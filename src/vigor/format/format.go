@@ -9,7 +9,7 @@ import (
 	"bytes"
 	"go/scanner"
 
-	"util"
+	"vigor/util"
 
 	"github.com/garyburd/neovim-go/vim"
 	"github.com/garyburd/neovim-go/vim/plugin"
