@@ -159,7 +159,7 @@ func simpleImporter(imports map[string]*ast.Object, path string) (*ast.Object, e
 		return pkg, nil
 	}
 
-	n := guessNameFromPath(path)
+	n := GuessPackageNameFromPath(path)
 	if n == "" {
 		return nil, errors.New("package not found")
 	}
@@ -186,8 +186,8 @@ var packageNamePats = []*regexp.Regexp{
 	regexp.MustCompile(`([^/]+)$`),
 }
 
-// guessNameFromPath guesses the package name from the package path.
-func guessNameFromPath(path string) string {
+// GuessPackageNameFromPath guesses the package name from the package path.
+func GuessPackageNameFromPath(path string) string {
 	// Guess the package name without importing it.
 	for _, pat := range packageNamePats {
 		m := pat.FindStringSubmatch(path)

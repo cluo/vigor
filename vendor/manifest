@@ -4,35 +4,35 @@
 		{
 			"importpath": "github.com/garyburd/neovim-go/msgpack",
 			"repository": "https://github.com/garyburd/neovim-go",
-			"revision": "ac70bbb2b2c414d5005915dfdbd2553c5eab6baa",
+			"revision": "9343e0d04bff21a402e83828cf258a67c59488ec",
 			"branch": "master",
 			"path": "/msgpack"
 		},
 		{
 			"importpath": "github.com/garyburd/neovim-go/vim",
 			"repository": "https://github.com/garyburd/neovim-go",
-			"revision": "ac70bbb2b2c414d5005915dfdbd2553c5eab6baa",
+			"revision": "9343e0d04bff21a402e83828cf258a67c59488ec",
 			"branch": "master",
 			"path": "/vim"
 		},
 		{
 			"importpath": "github.com/garyburd/neovim-go/vim/vimtest",
 			"repository": "https://github.com/garyburd/neovim-go",
-			"revision": "ac70bbb2b2c414d5005915dfdbd2553c5eab6baa",
+			"revision": "9343e0d04bff21a402e83828cf258a67c59488ec",
 			"branch": "master",
 			"path": "/vim/vimtest"
 		},
 		{
 			"importpath": "golang.org/x/tools/go/ast/astutil",
 			"repository": "https://go.googlesource.com/tools",
-			"revision": "2b785679434b0fd32e1331d4508a99f0abcfed04",
+			"revision": "e211dfb0007a215198c1161cbbb9683265c7c83a",
 			"branch": "master",
 			"path": "/go/ast/astutil"
 		},
 		{
 			"importpath": "golang.org/x/tools/imports",
 			"repository": "https://go.googlesource.com/tools",
-			"revision": "2b785679434b0fd32e1331d4508a99f0abcfed04",
+			"revision": "e211dfb0007a215198c1161cbbb9683265c7c83a",
 			"branch": "master",
 			"path": "/imports"
 		}
