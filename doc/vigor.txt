@@ -1,0 +1,24 @@
+*vigor.txt* Go development plugin
+
+COMMANDS
+
+                                                                     *:GoDoc*
+:GoDoc packageSpec [symbol[.method]]
+
+Display Go package documentation. If packageSpec starts with ".", the
+specification is a relative directory name. If packageSpec starts with ",",
+then the specification is the name of a package imported in the current file.
+Otherwise, package specification is an import path.
+
+The keyboard mappings for a documentation buffer are:
+
+  o       Jump to the source code for the current page.
+  -       Navigate up the documentation hierarchy.
+  CTRL-]  Jump to documentation for the entity under the cursor.
+    
+                                                                    *:Fmt*
+:Fmt
+
+Format the current buffer using goimports.
+
+vim:ft=help:et:ts=2:sw=2:sts=2:norl
