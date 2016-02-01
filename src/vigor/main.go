@@ -6,7 +6,7 @@
 package main
 
 import (
-	_ "vigor/doc"
+	_ "vigor/explore"
 	_ "vigor/format"
 
 	"github.com/garyburd/neovim-go/vim/plugin"

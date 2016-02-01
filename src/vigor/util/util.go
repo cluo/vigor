@@ -6,6 +6,7 @@ package util
 
 import (
 	"errors"
+	"fmt"
 	"go/ast"
 	"go/build"
 	"go/doc"
@@ -20,6 +21,25 @@ import (
 	"sync"
 )
 
+func FindGbProject(path string) (string, error) {
+	if path == "" {
+		return "", fmt.Errorf("project root is blank")
+	}
+	start := path
+	for path != filepath.Dir(path) {
+		root := filepath.Join(path, "src")
+		if _, err := os.Stat(root); err != nil {
+			if os.IsNotExist(err) {
+				path = filepath.Dir(path)
+				continue
+			}
+			return "", err
+		}
+		return path, nil
+	}
+	return "", fmt.Errorf(`could not find project root in "%s" or its parents`, start)
+}
+
 // GoPath returns a GOPATH for path p.
 func GoPath(p string) string {
 	goPath := os.Getenv("GOPATH")
@@ -30,9 +50,10 @@ func GoPath(p string) string {
 		}
 	}
 
-	if i := strings.Index(p, string(filepath.Separator)+"src"+string(filepath.Separator)); i > 0 {
-		return p[:i] + string(filepath.ListSeparator) +
-			filepath.Join(p[:i], "vendor") + string(filepath.ListSeparator) +
+	project, err := FindGbProject(p)
+	if err == nil {
+		return project + string(filepath.ListSeparator) +
+			filepath.Join(project, "vendor") + string(filepath.ListSeparator) +
 			goPath
 	}
 

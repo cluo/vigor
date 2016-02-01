@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Package doc implements the :GoDoc command.
+// Package explore implements the :Godoc and :Godef commands.
 package doc
 
 import (
@@ -27,7 +27,8 @@ var state = struct {
 }
 
 func init() {
-	plugin.HandleCommand("GoDoc", &plugin.CommandOptions{NArgs: "*", Complete: "customlist,QQQDocComplete", Eval: "getcwd()"}, onDoc)
+	plugin.HandleCommand("Godoc", &plugin.CommandOptions{NArgs: "*", Complete: "customlist,QQQDocComplete", Eval: "getcwd()"}, onDoc)
+	plugin.HandleCommand("Godef", &plugin.CommandOptions{NArgs: "*", Complete: "customlist,QQQDocComplete", Eval: "getcwd()"}, onDef)
 	plugin.HandleFunction("QQQDocComplete", &plugin.FunctionOptions{Eval: "getcwd()"}, onComplete)
 	plugin.HandleAutocmd("BufReadCmd", &plugin.AutocmdOptions{Pattern: protoSlashSlash + "**", Eval: "[expand('%'), getcwd()]"}, onBufReadCmd)
 	plugin.Handle("doc.onBufDelete", onBufDelete)
@@ -104,6 +105,36 @@ func onDoc(v *vim.Vim, args []string, cwd string) error {
 	return v.Command(fmt.Sprintf("%s %s%s%s%s", editCommand, protoSlashSlash, path, sharp, sym))
 }
 
+func onDef(v *vim.Vim, args []string, cwd string) error {
+	if len(args) < 1 || len(args) > 2 {
+		return v.WriteErr("one or two arguments required")
+	}
+
+	defer util.WithGoBuildForPath(cwd)()
+	path := resolvePackageSpec(cwd, vimutil.CurrentBufferReader(v), args[0])
+
+	var sym string
+	if len(args) >= 2 {
+		sym = strings.Trim(args[1], ".")
+	}
+
+	file, line, col, err := findDef(cwd, path, sym)
+
+	if err != nil {
+		return v.WriteErr("definition not found")
+	}
+
+	p := v.NewPipeline()
+	p.Command(fmt.Sprintf("edit %s", file))
+	if line != 0 {
+		p.Command(fmt.Sprintf("%d", line))
+	}
+	if col != 0 {
+		p.Command(fmt.Sprintf("normal %d|", col))
+	}
+	return p.Wait()
+}
+
 func onComplete(v *vim.Vim, a *vimutil.CommandCompletionArgs, cwd string) ([]string, error) {
 	defer util.WithGoBuildForPath(cwd)()
 	f := strings.Fields(a.CmdLine)
@@ -178,6 +209,7 @@ func onBufReadCmd(v *vim.Vim, eval *bufReadEval) error {
 	p.Command(`highlight link godocDecl Statement`)
 	p.Command(fmt.Sprintf("nnoremap <buffer> <silent> <c-]> :execute rpcrequest(%d, 'doc.onJump', %d, line('.'), col('.'))<CR>", channelID, int(b)))
 	p.Command(fmt.Sprintf("nnoremap <buffer> <silent> - :execute rpcrequest(%d, 'doc.onUp', expand('%%'))<CR>", channelID))
+	p.Command("nnoremap <buffer> <silent> g? :help :Godef")
 	if bd.file != "" {
 		c := "nnoremap <buffer> <silent> o :edit " + bd.file
 		if bd.line != 0 {

@@ -24,10 +24,8 @@ func completePackage(cwd string, src io.Reader, arg string) (completions []strin
 	switch {
 	case arg == ".":
 		completions = []string{"./", "../"}
-
 	case arg == "..":
 		completions = []string{"../"}
-
 	case strings.HasPrefix(arg, "."):
 		// Complete using relative directory.
 		bpkg, err := build.Import(".", cwd, build.FindOnly)
@@ -47,26 +45,21 @@ func completePackage(cwd string, src io.Reader, arg string) (completions []strin
 				completions = append(completions, path.Join(dir, fi.Name())+"/")
 			}
 		}
-		sort.Strings(completions)
-
-	case strings.HasPrefix(arg, ","):
+	case strings.HasPrefix(arg, "/"):
+		// Complete using full import path.
+		completions = completePackageByPath(arg)
+	default:
 		// Complete with package names imported in current file.
 		for n := range readImports(cwd, src) {
-			if strings.HasPrefix(n, arg[1:]) {
-				completions = append(completions, ","+n)
+			if strings.HasPrefix(n, arg) {
+				completions = append(completions, n)
 			}
 		}
-		if len(completions) == 0 && len(completePackageByPath(arg)) > 0 {
-			// Fallback to arg if arg will complete on import path.
-			completions = []string{arg}
-		}
-		sort.Strings(completions)
-
-	default:
-		// Complete using import path.
-		completions = completePackageByPath(arg)
-		sort.Strings(completions)
 	}
+	if len(completions) == 0 {
+		completions = []string{arg}
+	}
+	sort.Strings(completions)
 	return completions
 }
 
@@ -77,8 +70,10 @@ func resolvePackageSpec(cwd string, src io.Reader, spec string) string {
 		if bpkg, err := build.Import(spec, cwd, build.FindOnly); err == nil {
 			path = bpkg.ImportPath
 		}
-	case strings.HasPrefix(spec, ","):
-		if p, ok := readImports(cwd, src)[spec[1:]]; ok {
+	case strings.HasPrefix(spec, "/"):
+		path = path[1:]
+	default:
+		if p, ok := readImports(cwd, src)[spec]; ok {
 			path = p
 		}
 	}
@@ -87,7 +82,7 @@ func resolvePackageSpec(cwd string, src io.Reader, spec string) string {
 
 func completePackageByPath(arg string) []string {
 	var completions []string
-	dir, name := path.Split(arg)
+	dir, name := path.Split(arg[1:])
 	for _, srcDir := range build.Default.SrcDirs() {
 		fis, err := ioutil.ReadDir(filepath.Join(srcDir, filepath.FromSlash(dir)))
 		if err != nil {
@@ -98,7 +93,7 @@ func completePackageByPath(arg string) []string {
 				continue
 			}
 			if strings.HasPrefix(fi.Name(), name) {
-				completions = append(completions, path.Join(dir, fi.Name())+"/")
+				completions = append(completions, path.Join("/", dir, fi.Name())+"/")
 			}
 		}
 	}

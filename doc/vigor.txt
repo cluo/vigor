@@ -2,20 +2,27 @@
 
 COMMANDS
 
-                                                                     *:GoDoc*
-:GoDoc packageSpec [symbol[.method]]
+                                                                     *:Godoc*
+:Godoc packageSpec [symbol[.method]]
 
 Display Go package documentation. If packageSpec starts with ".", the
-specification is a relative directory name. If packageSpec starts with ",",
-then the specification is the name of a package imported in the current file.
-Otherwise, package specification is an import path.
+specification is a relative directory name. If packageSpec starts with "/",
+then the specification is an import path. Otherwise, the specification is the
+name of a file imported in the current file.
 
 The keyboard mappings for a documentation buffer are:
 
   o       Jump to the source code for the current page.
   -       Navigate up the documentation hierarchy.
   CTRL-]  Jump to documentation for the entity under the cursor.
-    
+  g?      Show this help.
+
+                                                                     *:Godef*
+:Godef packageSpec [symbol[.method]]
+
+Jump to definition of specified entity.
+
+     
                                                                     *:Fmt*
 :Fmt
 
