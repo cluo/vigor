@@ -191,11 +191,12 @@ func onBufReadCmd(v *vim.Vim, eval *bufReadEval) error {
 	p.SetBufferOption(b, "swapfile", false)
 	p.SetBufferOption(b, "modifiable", false)
 	p.SetBufferOption(b, "readonly", true)
+	p.SetBufferOption(b, "tabstop", 4)
 	p.Command("autocmd! * <buffer>")
 	p.Command(fmt.Sprintf("autocmd BufDelete <buffer> call rpcnotify(%d, 'doc.onBufDelete', %d)", channelID, int(b)))
 	p.Command(fmt.Sprintf("autocmd BufWinEnter <buffer> call rpcrequest(%d, 'doc.onBufWinEnter', %d)", channelID, int(b)))
 	p.Command("autocmd BufWinLeave <buffer> call clearmatches()")
-	p.Command(`syntax region godocDecl start='^\(package\|const\|var\|func\|type\) ' end='^$' contains=godocComment,godocParen,godocBrace`)
+	p.Command(`syntax region godocDecl start='\%^\(package\|const\|var\|func\|type\) ' end='^$' contains=godocComment,godocParen,godocBrace`)
 	p.Command(`syntax region godocParen start='(' end=')' contained contains=godocComment,godocParen,godocBrace`)
 	p.Command(`syntax region godocBrace start='{' end='}' contained contains=godocComment,godocParen,godocBrace`)
 	p.Command(`syntax region godocComment start='/\*' end='\*/'  contained`)
@@ -207,6 +208,9 @@ func onBufReadCmd(v *vim.Vim, eval *bufReadEval) error {
 	p.Command(`highlight link godocParan Statement`)
 	p.Command(`highlight link godocHead Statement`)
 	p.Command(`highlight link godocDecl Statement`)
+	for _, f := range bd.folds {
+		p.Command(fmt.Sprintf("%d,%dfold", f[0], f[1]))
+	}
 	p.Command(fmt.Sprintf("nnoremap <buffer> <silent> <c-]> :execute rpcrequest(%d, 'doc.onJump', %d, line('.'), col('.'))<CR>", channelID, int(b)))
 	p.Command(fmt.Sprintf("nnoremap <buffer> <silent> - :execute rpcrequest(%d, 'doc.onUp', expand('%%'))<CR>", channelID))
 	p.Command("nnoremap <buffer> <silent> g? :help :Godef")

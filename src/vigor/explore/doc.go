@@ -31,6 +31,7 @@ const (
 	textIndent      = "    "
 	textWidth       = 80 - len(textIndent)
 	protoSlashSlash = "godoc://"
+	whiteSpace      = " \t\n"
 )
 
 // printer holds state used to create a documentation page.
@@ -61,6 +62,7 @@ type bufferData struct {
 	links      []*link
 	file       string
 	line       int
+	folds      [][2]int
 }
 
 func position(line, column int) int {
@@ -96,7 +98,7 @@ func print(uri string, cwd string) ([][]byte, *bufferData, error) {
 	if importPath == "" {
 		p.directoryPage()
 	} else {
-		pkg, err := util.LoadPackage(importPath, cwd, util.LoadDoc)
+		pkg, err := util.LoadPackage(importPath, cwd, util.LoadDoc|util.LoadExamples)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -116,7 +118,7 @@ func print(uri string, cwd string) ([][]byte, *bufferData, error) {
 		}
 	}
 
-	lines := bytes.Split(bytes.TrimRight(p.out.Bytes(), " \t\n"), []byte{'\n'})
+	lines := bytes.Split(p.out.Bytes(), []byte{'\n'})
 	return lines, p.bd, nil
 }
 
@@ -136,12 +138,12 @@ func parseURI(s string) (importPath, symbol, method string) {
 }
 
 func (p *printer) directoryPage() {
+	p.printf("Directory")
 	p.dirs()
 }
 
 func (p *printer) commandPage() {
 	p.printf("Command ")
-	p.printf("\n\n")
 	p.doc(p.Doc.Doc)
 	p.dirs()
 	p.bd.file = p.Build.Dir
@@ -153,9 +155,13 @@ func (p *printer) packagePage() {
 	if p.Build.ImportComment != "" {
 		importPath = p.Build.ImportComment
 	}
-	p.printf("package %s // import \"%s\"\n\n", p.Doc.Name, importPath)
+	p.printf("package %s // import \"%s\"", p.Doc.Name, importPath)
 	p.doc(p.Doc.Doc)
-	p.examples("")
+
+	if len(p.Doc.Consts) > 0 || len(p.Doc.Vars) > 0 || len(p.Doc.Funcs) > 0 || len(p.Doc.Types) > 0 {
+		p.out.WriteString("\n")
+	}
+
 	for _, d := range p.Doc.Consts {
 		p.valueLine(d)
 	}
@@ -169,6 +175,7 @@ func (p *printer) packagePage() {
 		p.typeLine(d)
 	}
 	p.dirs()
+	p.examples("")
 	p.bd.file = p.Build.Dir
 	p.bd.line = 0
 }
@@ -226,16 +233,20 @@ func (p *printer) funcPage(d *doc.Func, examplePrefix string) {
 func (p *printer) typePage(d *doc.Type) {
 	p.decl(d.Decl)
 	p.doc(d.Doc)
-	p.examples(d.Name)
-	for _, m := range d.Methods {
-		p.funcLine(m)
+	if len(d.Methods) > 0 {
+		p.out.WriteString("\n\n")
+		for _, m := range d.Methods {
+			p.funcLine(m)
+		}
 	}
+	p.examples(d.Name)
 }
 
 func (p *printer) funcLine(d *doc.Func) {
 	decl := *d.Decl
 	decl.Doc = nil
 	decl.Body = nil
+	p.out.WriteByte('\n')
 	startPos := p.outputPosition()
 	p.out.Write(p.nodeLine(&decl))
 	n := d.Name
@@ -243,10 +254,10 @@ func (p *printer) funcLine(d *doc.Func) {
 		n = strings.TrimPrefix(d.Recv, "*") + "." + n
 	}
 	p.addLink(startPos, p.Build.ImportPath, n)
-	p.out.WriteByte('\n')
 }
 
 func (p *printer) typeLine(d *doc.Type) {
+	p.out.WriteByte('\n')
 	startPos := p.outputPosition()
 	spec := d.Decl.Specs[0].(*ast.TypeSpec) // Must succeed.
 	switch spec.Type.(type) {
@@ -258,10 +269,10 @@ func (p *printer) typeLine(d *doc.Type) {
 		p.printf("type %s %s", d.Name, p.nodeLine(spec.Type))
 	}
 	p.addLink(startPos, "", d.Name)
-	p.out.WriteByte('\n')
 }
 
 func (p *printer) valueLine(d *doc.Value) {
+	p.out.WriteByte('\n')
 	startPos := p.outputPosition()
 	spec := d.Decl.Specs[0].(*ast.ValueSpec)
 	typ := ""
@@ -278,18 +289,14 @@ func (p *printer) valueLine(d *doc.Value) {
 	}
 	p.printf("%s %s%s%s%s", d.Decl.Tok, spec.Names[0], typ, val, dotDotDot)
 	p.addLink(startPos, "", d.Names[0])
-	p.out.WriteByte('\n')
 }
 
 func (p *printer) doc(s string) {
-	s = strings.TrimRight(s, " \t\n")
 	if s != "" {
-		doc.ToText(&p.out, s, "", textIndent, textWidth)
-		b := p.out.Bytes()
-		if b[len(b)-1] != '\n' {
-			p.out.WriteByte('\n')
-		}
-		p.out.WriteByte('\n')
+		var buf bytes.Buffer
+		doc.ToText(&buf, s, "", textIndent, textWidth)
+		p.out.WriteString("\n\n")
+		p.out.Write(bytes.TrimRight(buf.Bytes(), whiteSpace))
 	}
 }
 
@@ -334,6 +341,13 @@ func (p *printer) examples(name string) {
 			name = strings.Title(name)
 		}
 
+		p.out.WriteString("\n\n")
+		startLine, _ := lineColumn(p.outputPosition())
+		p.printf("\nExample %s", name)
+		if e.Doc != "" {
+			p.doc(e.Doc)
+		}
+
 		var node interface{}
 		if _, ok := e.Code.(*ast.File); ok {
 			node = e.Play
@@ -352,29 +366,28 @@ func (p *printer) examples(name string) {
 		if i := len(b); i >= 2 && b[0] == '{' && b[i-1] == '}' {
 			// Remove surrounding braces.
 			b = b[1 : i-1]
-			// Unindent
-			b = bytes.Replace(b, []byte("\n    "), []byte("\n"), -1)
 			// Remove output comment
 			if j := exampleOutputRx.FindIndex(b); j != nil {
-				b = bytes.TrimSpace(b[:j[0]])
+				b = b[:j[0]]
 			}
+			b = bytes.TrimSpace(b)
 		} else {
 			// Drop output, as the output comment will appear in the code
 			e.Output = ""
+			// Indent all code
+			b = bytes.Replace(bytes.TrimSpace(b), []byte("\n"), []byte("\n\t"), -1)
 		}
 
-		// Hide examples for now. I tried displaying comments inline and folded
-		// and found them both distracting. Consider including link from doc
-		// to examples at the end of the page.
-		/*
-			p.out.Write(b)
-			p.out.WriteByte('\n')
-			if e.Output != "" {
-				p.string(e.Output)
-				buf.WriteByte('\n')
-			}
-			p.out.WriteByte('\n')
-		*/
+		p.out.WriteString("\n\nCode:\n\n\t")
+		p.out.Write(b)
+
+		if e.Output != "" {
+			p.out.WriteString("\n\nOutput:\n\n\t")
+			p.out.WriteString(strings.Replace(strings.TrimSpace(e.Output), "\n", "\n\t", -1))
+		}
+
+		endLine, _ := lineColumn(p.outputPosition())
+		p.bd.folds = append(p.bd.folds, [2]int{startLine, endLine})
 	}
 }
 
@@ -414,17 +427,22 @@ func (p *printer) dirs() {
 		}
 	}
 
+	if len(m) == 0 {
+		return
+	}
+
 	var names []string
 	for name := range m {
 		names = append(names, name)
 	}
 	sort.Sort(dirSlice(names))
 
+	p.out.WriteString("\n\n")
 	for _, name := range names {
+		p.out.WriteByte('\n')
 		startPos := p.outputPosition()
 		p.printf("%s%c", name, filepath.Separator)
 		p.addLink(startPos, path.Join(importPath, name), "")
-		p.out.WriteByte('\n')
 	}
 }
 
@@ -488,7 +506,7 @@ func (p *printer) decl(decl ast.Decl) {
 		p.out.WriteString(err.Error())
 		return
 	}
-	buf := bytes.TrimRight(w.Bytes(), " \t\n")
+	buf := bytes.TrimRight(w.Bytes(), whiteSpace)
 
 	var s scanner.Scanner
 	fset := token.NewFileSet()
@@ -532,7 +550,6 @@ loop:
 		}
 	}
 	p.out.Write(buf[lastOffset:])
-	p.out.WriteString("\n\n")
 }
 
 const (
