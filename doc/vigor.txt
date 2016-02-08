@@ -1,14 +1,17 @@
-*vigor.txt* Go development plugin
+*vigor.txt* 	Go development plugin
+
+Some Vigor commands take a package specification as an argument.  If the
+specification starts with ".", the specification is a relative directory name.
+If the specification starts with "/", then the specification is an import
+path. Otherwise, the specification is the name of a file imported in the
+current file.
 
 COMMANDS
 
                                                                      *:Godoc*
 :Godoc packageSpec [symbol[.method]]
 
-Display Go package documentation. If packageSpec starts with ".", the
-specification is a relative directory name. If packageSpec starts with "/",
-then the specification is an import path. Otherwise, the specification is the
-name of a file imported in the current file.
+Display Go package documentation. 
 
 The keyboard mappings for a documentation buffer are:
 
@@ -16,6 +19,11 @@ The keyboard mappings for a documentation buffer are:
   -       Navigate up the documentation hierarchy.
   CTRL-]  Jump to documentation for the entity under the cursor.
   g?      Show this help.
+
+:Pgodoc packageSpec [symbol[.method]]                               *:Pgodoc*
+
+Display Go package documentation in the preview window.  See the |:Godoc| 
+command for more information.
 
                                                                      *:Godef*
 :Godef packageSpec [symbol[.method]]

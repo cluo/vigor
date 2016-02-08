@@ -7,6 +7,7 @@ package doc
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -27,7 +28,8 @@ var state = struct {
 }
 
 func init() {
-	plugin.HandleCommand("Godoc", &plugin.CommandOptions{NArgs: "*", Complete: "customlist,QQQDocComplete", Eval: "getcwd()"}, onDoc)
+	plugin.HandleCommand("Godoc", &plugin.CommandOptions{NArgs: "*", Complete: "customlist,QQQDocComplete", Eval: "[getcwd(), 0]"}, onDoc)
+	plugin.HandleCommand("Pgodoc", &plugin.CommandOptions{NArgs: "*", Complete: "customlist,QQQDocComplete", Eval: "[getcwd(), 1]"}, onDoc)
 	plugin.HandleCommand("Godef", &plugin.CommandOptions{NArgs: "*", Complete: "customlist,QQQDocComplete", Eval: "getcwd()"}, onDef)
 	plugin.HandleFunction("QQQDocComplete", &plugin.FunctionOptions{Eval: "getcwd()"}, onComplete)
 	plugin.HandleAutocmd("BufReadCmd", &plugin.AutocmdOptions{Pattern: protoSlashSlash + "**", Eval: "[expand('%'), getcwd()]"}, onBufReadCmd)
@@ -37,13 +39,18 @@ func init() {
 	plugin.Handle("doc.onUp", onUp)
 }
 
-func onDoc(v *vim.Vim, args []string, cwd string) error {
+type onDocEval struct {
+	Cwd     string `msgpack:",array"`
+	Preview bool
+}
+
+func onDoc(v *vim.Vim, args []string, eval *onDocEval) error {
 	if len(args) < 1 || len(args) > 2 {
-		return v.WriteErr("one or two arguments required")
+		return errors.New("one or two arguments required")
 	}
 
-	cleanup := util.WithGoBuildForPath(cwd)
-	path := resolvePackageSpec(cwd, vimutil.CurrentBufferReader(v), args[0])
+	cleanup := util.WithGoBuildForPath(eval.Cwd)
+	path := resolvePackageSpec(eval.Cwd, vimutil.CurrentBufferReader(v), args[0])
 	cleanup()
 
 	var sym string
@@ -52,6 +59,9 @@ func onDoc(v *vim.Vim, args []string, cwd string) error {
 	}
 
 	editCommand := "edit"
+	if eval.Preview {
+		editCommand = "pedit"
+	}
 	/*
 	   This commented out code opens the documentation in a window that's already
 	   showing the documentationn or in a new tab.
@@ -107,7 +117,7 @@ func onDoc(v *vim.Vim, args []string, cwd string) error {
 
 func onDef(v *vim.Vim, args []string, cwd string) error {
 	if len(args) < 1 || len(args) > 2 {
-		return v.WriteErr("one or two arguments required")
+		return errors.New("one or two arguments required")
 	}
 
 	defer util.WithGoBuildForPath(cwd)()
@@ -121,7 +131,7 @@ func onDef(v *vim.Vim, args []string, cwd string) error {
 	file, line, col, err := findDef(cwd, path, sym)
 
 	if err != nil {
-		return v.WriteErr("definition not found")
+		return errors.New("definition not found")
 	}
 
 	p := v.NewPipeline()
@@ -215,9 +225,9 @@ func onBufReadCmd(v *vim.Vim, eval *bufReadEval) error {
 	p.Command(fmt.Sprintf("nnoremap <buffer> <silent> - :execute rpcrequest(%d, 'doc.onUp', expand('%%'))<CR>", channelID))
 	p.Command("nnoremap <buffer> <silent> g? :help :Godef")
 	if bd.file != "" {
-		c := "nnoremap <buffer> <silent> o :edit " + bd.file
+		c := `nnoremap <buffer> <silent> o :if &previewwindow \| wincmd p \| endif \| edit ` + bd.file
 		if bd.line != 0 {
-			c += fmt.Sprintf("\\| %d", bd.line)
+			c += fmt.Sprintf(`\| %d`, bd.line)
 		}
 		c += "<CR>"
 		p.Command(c)

@@ -5,11 +5,9 @@
 package doc
 
 import (
-	"errors"
 	"fmt"
 	"go/ast"
 	"go/doc"
-	"log"
 	"path/filepath"
 	"strings"
 
@@ -17,15 +15,11 @@ import (
 )
 
 func findDef(cwd, importPath, symbol string) (string, int, int, error) {
-	log.Println("LOAD", importPath, cwd)
 	pkg, err := util.LoadPackage(importPath, cwd, util.LoadDoc)
 	if err != nil {
 		return "", 0, 0, err
 	}
-	if pkg.Doc == nil {
-		return "", 0, 0, errors.New("no Go files in directory")
-	}
-	if symbol == "" {
+	if pkg.Doc == nil || symbol == "" {
 		return pkg.Build.Dir, 0, 0, nil
 	}
 	parts := strings.Split(symbol, ".")
