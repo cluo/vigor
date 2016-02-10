@@ -12,8 +12,8 @@ See [the help file](https://github.com/garyburd/vigor/blob/master/doc/vigor.txt)
 1. [Install gb](http://getgb.io/docs/install/).
 1. Change Vigor directory to the plugin directory and run the commands:
 
-    gb vendor restore
-    gb build
+        gb vendor restore
+        gb build
 
 1. Start nvim and run :UpdateRemotePlugins
 1. Restart nvim.

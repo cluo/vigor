@@ -28,8 +28,6 @@ import (
 )
 
 const (
-	textIndent      = "    "
-	textWidth       = 80 - len(textIndent)
 	protoSlashSlash = "godoc://"
 	whiteSpace      = " \t\n"
 )
@@ -294,9 +292,36 @@ func (p *printer) valueLine(d *doc.Value) {
 func (p *printer) doc(s string) {
 	if s != "" {
 		var buf bytes.Buffer
-		doc.ToText(&buf, s, "", textIndent, textWidth)
-		p.out.WriteString("\n\n")
-		p.out.Write(bytes.TrimRight(buf.Bytes(), whiteSpace))
+		doc.ToText(&buf, s, "", "    ", 78)
+
+		blank := 0
+		first := true
+		for _, line := range bytes.Split(buf.Bytes(), []byte("\n")) {
+			if len(line) == 0 {
+				blank += 1
+				continue
+			}
+			if first {
+				p.out.WriteString("\n")
+				first = false
+			}
+			if blank < 2 || line[0] == ' ' || line[0] == '\t' {
+				// It's not a header line.
+				p.out.WriteString("\n\n\n"[:blank+1])
+				p.out.Write(line)
+				if line[len(line)-1] == '~' {
+					p.out.WriteByte(' ')
+				}
+				blank = 0
+				continue
+			}
+
+			// It is a header line.
+			p.out.WriteString("\n\n")
+			p.out.Write(line)
+			p.out.WriteString(" ~")
+			blank = 0
+		}
 	}
 }
 
@@ -343,7 +368,7 @@ func (p *printer) examples(name string) {
 
 		p.out.WriteString("\n\n")
 		startLine, _ := lineColumn(p.outputPosition())
-		p.printf("\nExample %s", name)
+		p.printf("Example %s ~", name)
 		if e.Doc != "" {
 			p.doc(e.Doc)
 		}
@@ -372,13 +397,13 @@ func (p *printer) examples(name string) {
 			}
 			b = bytes.TrimSpace(b)
 		} else {
-			// Drop output, as the output comment will appear in the code
-			e.Output = ""
+			//// Drop output, as the output comment will appear in the code
+			//e.Output = ""
 			// Indent all code
 			b = bytes.Replace(bytes.TrimSpace(b), []byte("\n"), []byte("\n\t"), -1)
 		}
 
-		p.out.WriteString("\n\nCode:\n\n\t")
+		p.out.WriteString("\n\nCode: >\n\n\t")
 		p.out.Write(b)
 
 		if e.Output != "" {
@@ -437,7 +462,7 @@ func (p *printer) dirs() {
 	}
 	sort.Sort(dirSlice(names))
 
-	p.out.WriteString("\n\n")
+	p.out.WriteString("\n")
 	for _, name := range names {
 		p.out.WriteByte('\n')
 		startPos := p.outputPosition()

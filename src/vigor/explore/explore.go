@@ -140,7 +140,7 @@ func onDef(v *vim.Vim, args []string, cwd string) error {
 		p.Command(fmt.Sprintf("%d", line))
 	}
 	if col != 0 {
-		p.Command(fmt.Sprintf("normal %d|", col))
+		p.Command(fmt.Sprintf("normal! %d|", col))
 	}
 	return p.Wait()
 }
@@ -163,9 +163,14 @@ type bufReadEval struct {
 }
 
 func onBufReadCmd(v *vim.Vim, eval *bufReadEval) error {
-	defer util.WithGoBuildForPath(eval.Cwd)()
-	b, err := v.CurrentBuffer()
-	if err != nil {
+	var (
+		b vim.Buffer
+		w vim.Window
+	)
+	p := v.NewPipeline()
+	p.CurrentBuffer(&b)
+	p.CurrentWindow(&w)
+	if err := p.Wait(); err != nil {
 		return err
 	}
 
@@ -173,7 +178,7 @@ func onBufReadCmd(v *vim.Vim, eval *bufReadEval) error {
 	delete(state.m, int(b))
 	state.Unlock()
 
-	p := v.NewPipeline()
+	defer util.WithGoBuildForPath(eval.Cwd)()
 
 	lines, bd, err := print(eval.Name, eval.Cwd)
 	if err != nil {
@@ -198,26 +203,27 @@ func onBufReadCmd(v *vim.Vim, eval *bufReadEval) error {
 	p.SetBufferLineSlice(b, 0, -1, true, true, lines)
 	p.SetBufferOption(b, "buftype", "nofile")
 	p.SetBufferOption(b, "bufhidden", "hide")
+	p.SetBufferOption(b, "buflisted", false)
 	p.SetBufferOption(b, "swapfile", false)
 	p.SetBufferOption(b, "modifiable", false)
 	p.SetBufferOption(b, "readonly", true)
 	p.SetBufferOption(b, "tabstop", 4)
+	p.SetWindowOption(w, "conceallevel", 3)
+	p.SetWindowOption(w, "concealcursor", "nv")
 	p.Command("autocmd! * <buffer>")
 	p.Command(fmt.Sprintf("autocmd BufDelete <buffer> call rpcnotify(%d, 'doc.onBufDelete', %d)", channelID, int(b)))
 	p.Command(fmt.Sprintf("autocmd BufWinEnter <buffer> call rpcrequest(%d, 'doc.onBufWinEnter', %d)", channelID, int(b)))
 	p.Command("autocmd BufWinLeave <buffer> call clearmatches()")
-	p.Command(`syntax region godocDecl start='\%^\(package\|const\|var\|func\|type\) ' end='^$' contains=godocComment,godocParen,godocBrace`)
-	p.Command(`syntax region godocParen start='(' end=')' contained contains=godocComment,godocParen,godocBrace`)
-	p.Command(`syntax region godocBrace start='{' end='}' contained contains=godocComment,godocParen,godocBrace`)
+	p.Command(`syntax region godocCode start='\%^.' end='^[^ \t)}]'me=e-1 contains=godocComment`)
+	p.Command(`syntax region godocCode matchgroup=helpIgnore start=' >$' start='^>$' end='^[^ \t]'me=e-1 end='^<' concealends contains=godocComment`)
 	p.Command(`syntax region godocComment start='/\*' end='\*/'  contained`)
 	p.Command(`syntax region godocComment start='//' end='$' contained`)
-	p.Command(`syntax region godocHead start='\n\n\n' end='$'`)
-	p.Command(`syntax match godocHead '\n\n\n[^\t ].*$'`)
+	p.Command(`syntax match godocHead '^.*\ze\~$' nextgroup=godocIgnore`)
+	p.Command(`syntax match godocIgnore '.' conceal contained`)
 	p.Command(`highlight link godocComment Comment`)
-	p.Command(`highlight link godocBrace Statement`)
-	p.Command(`highlight link godocParan Statement`)
 	p.Command(`highlight link godocHead Statement`)
-	p.Command(`highlight link godocDecl Statement`)
+	p.Command(`highlight link godocCode Statement`)
+	p.Command(`highlight link godocIgnore Ignore`)
 	for _, f := range bd.folds {
 		p.Command(fmt.Sprintf("%d,%dfold", f[0], f[1]))
 	}
