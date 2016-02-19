@@ -64,6 +64,15 @@ func completePackage(cwd string, src io.Reader, arg string) (completions []strin
 }
 
 func resolvePackageSpec(cwd string, src io.Reader, spec string) string {
+	if strings.HasSuffix(spec, ".go") {
+		d := filepath.Dir(spec)
+		if !filepath.IsAbs(d) {
+			d = filepath.Join(cwd, d)
+		}
+		if bpkg, err := build.ImportDir(d, build.FindOnly); err == nil {
+			return bpkg.ImportPath
+		}
+	}
 	path := strings.TrimRight(spec, "/")
 	switch {
 	case strings.HasPrefix(spec, "."):

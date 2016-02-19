@@ -15,7 +15,7 @@ import (
 )
 
 func findDef(cwd, importPath, symbol string) (string, int, int, error) {
-	pkg, err := util.LoadPackage(importPath, cwd, util.LoadDoc)
+	pkg, err := util.LoadPackage(importPath, cwd, util.LoadDoc|util.LoadUnexported)
 	if err != nil {
 		return "", 0, 0, err
 	}

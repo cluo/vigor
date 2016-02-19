@@ -39,6 +39,17 @@ func init() {
 	plugin.Handle("doc.onUp", onUp)
 }
 
+func expandSpec(v *vim.Vim, spec string) (string, error) {
+	if len(spec) == 0 {
+		return spec, nil
+	}
+	if spec[0] != '%' && spec[0] != '#' && spec[0] != '<' {
+		return spec, nil
+	}
+	err := v.Call("expand", &spec, spec)
+	return spec, err
+}
+
 type onDocEval struct {
 	Cwd     string `msgpack:",array"`
 	Preview bool
@@ -49,8 +60,13 @@ func onDoc(v *vim.Vim, args []string, eval *onDocEval) error {
 		return errors.New("one or two arguments required")
 	}
 
+	spec, err := expandSpec(v, args[0])
+	if err != nil {
+		return err
+	}
+
 	cleanup := util.WithGoBuildForPath(eval.Cwd)
-	path := resolvePackageSpec(eval.Cwd, vimutil.CurrentBufferReader(v), args[0])
+	path := resolvePackageSpec(eval.Cwd, vimutil.CurrentBufferReader(v), spec)
 	cleanup()
 
 	var sym string
@@ -120,8 +136,13 @@ func onDef(v *vim.Vim, args []string, cwd string) error {
 		return errors.New("one or two arguments required")
 	}
 
+	spec, err := expandSpec(v, args[0])
+	if err != nil {
+		return err
+	}
+
 	defer util.WithGoBuildForPath(cwd)()
-	path := resolvePackageSpec(cwd, vimutil.CurrentBufferReader(v), args[0])
+	path := resolvePackageSpec(cwd, vimutil.CurrentBufferReader(v), spec)
 
 	var sym string
 	if len(args) >= 2 {
@@ -150,7 +171,11 @@ func onComplete(v *vim.Vim, a *vimutil.CommandCompletionArgs, cwd string) ([]str
 	f := strings.Fields(a.CmdLine)
 	var completions []string
 	if len(f) >= 3 || (len(f) == 2 && a.ArgLead == "") {
-		completions = completeSymMethod(resolvePackageSpec(cwd, vimutil.CurrentBufferReader(v), f[1]), a.ArgLead)
+		spec, err := expandSpec(v, f[1])
+		if err != nil {
+			return nil, err
+		}
+		completions = completeSymMethod(resolvePackageSpec(cwd, vimutil.CurrentBufferReader(v), spec), a.ArgLead)
 	} else {
 		completions = completePackage(cwd, vimutil.CurrentBufferReader(v), a.ArgLead)
 	}
