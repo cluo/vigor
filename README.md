@@ -14,7 +14,3 @@ See [the help file](https://github.com/garyburd/vigor/blob/master/doc/vigor.txt)
 
         gb vendor restore
         gb build
-
-1. Start nvim and run :UpdateRemotePlugins
-1. Restart nvim.
-
