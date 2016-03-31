@@ -24,7 +24,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"vigor/util"
+	"vigor/context"
 )
 
 const (
@@ -34,7 +34,7 @@ const (
 
 // printer holds state used to create a documentation page.
 type printer struct {
-	*util.Package
+	*context.Package
 
 	out     bytes.Buffer
 	scratch bytes.Buffer
@@ -86,7 +86,7 @@ func findLink(links []*link, line, col int) *link {
 }
 
 // print prints the documentation for the given uri.
-func print(uri string, cwd string) ([][]byte, *bufferData, error) {
+func print(ctx *context.Context, uri string, cwd string) ([][]byte, *bufferData, error) {
 	importPath, symbol, method := parseURI(uri)
 	p := printer{
 		lineNum:    1,
@@ -96,7 +96,7 @@ func print(uri string, cwd string) ([][]byte, *bufferData, error) {
 	if importPath == "" {
 		p.directoryPage()
 	} else {
-		pkg, err := util.LoadPackage(importPath, cwd, util.LoadDoc|util.LoadExamples)
+		pkg, err := ctx.LoadPackage(importPath, cwd, context.LoadDoc|context.LoadExamples)
 		if err != nil {
 			return nil, nil, err
 		}

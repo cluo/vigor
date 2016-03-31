@@ -2,16 +2,16 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package util
+package context
 
 import (
 	"errors"
-	"fmt"
 	"go/ast"
 	"go/build"
 	"go/doc"
 	"go/parser"
 	"go/token"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -19,63 +19,66 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/garyburd/neovim-go/vim"
 )
 
-func FindGbProject(path string) (string, error) {
-	if path == "" {
-		return "", fmt.Errorf("project root is blank")
-	}
-	start := path
-	for path != filepath.Dir(path) {
-		root := filepath.Join(path, "src")
-		if _, err := os.Stat(root); err != nil {
-			if os.IsNotExist(err) {
-				path = filepath.Dir(path)
-				continue
-			}
-			return "", err
-		}
-		return path, nil
-	}
-	return "", fmt.Errorf(`could not find project root in "%s" or its parents`, start)
+type Env struct {
+	GOROOT string `eval:"$GOROOT"`
+	GOPATH string `eval:"$GOPATH"`
+	GOOS   string `eval:"$GOOS"`
+	GOARCH string `eval:"$GOARCH"`
 }
 
-// GoPath returns a GOPATH for path p.
-func GoPath(p string) string {
-	goPath := os.Getenv("GOPATH")
-	p = filepath.Clean(p)
-	for _, root := range filepath.SplitList(goPath) {
-		if strings.HasPrefix(p, filepath.Join(root, "src")+string(filepath.Separator)) {
-			return goPath
-		}
-	}
+type Context struct {
+	Environ []string
+	Build   build.Context
 
-	project, err := FindGbProject(p)
-	if err == nil {
-		return project + string(filepath.ListSeparator) +
-			filepath.Join(project, "vendor") + string(filepath.ListSeparator) +
-			goPath
-	}
-
-	return goPath
+	env *Env
+	mu  sync.Mutex
 }
 
-var goBuildDefaultMu sync.Mutex
+var (
+	ctx *Context
+	mu  sync.Mutex
+)
 
-// WithGoBuildForPath sets the go/build Default.GOPATH to GoPath(p) under a
-// mutex. The returned function restores Default.GOPATH to its original value
-// and unlocks the mutex.
-//
-// This function intended to be used to the golang.org/x/tools/imports and
-// other packages that use go/build Default.
-func WithGoBuildForPath(p string) func() {
-	goBuildDefaultMu.Lock()
-	original := build.Default.GOPATH
-	build.Default.GOPATH = GoPath(p)
-	return func() {
-		build.Default.GOPATH = original
-		goBuildDefaultMu.Unlock()
+func Get(env *Env, v *vim.Vim) *Context {
+	mu.Lock()
+	defer mu.Unlock()
+	if ctx != nil && *ctx.env == *env {
+		return ctx
 	}
+	m := make(map[string]string)
+	for _, e := range os.Environ() {
+		if i := strings.Index(e, "="); i > 0 {
+			m[e[:i]] = e
+		}
+	}
+	ctx = &Context{env: env, Build: build.Default}
+	if env.GOROOT != "" {
+		ctx.Build.GOROOT = env.GOROOT
+		m["GOROOT"] = "GOROOT=" + env.GOROOT
+	}
+	if env.GOPATH != "" {
+		ctx.Build.GOPATH = env.GOPATH
+		m["GOPATH"] = "GOPATH=" + env.GOPATH
+	}
+	if env.GOOS != "" {
+		ctx.Build.GOOS = env.GOOS
+		m["GOOS"] = "GOOS=" + env.GOOS
+	}
+	if env.GOARCH != "" {
+		ctx.Build.GOARCH = env.GOARCH
+		m["GOARCH"] = "GOARCH=" + env.GOARCH
+	}
+	for _, e := range m {
+		ctx.Environ = append(ctx.Environ, e)
+	}
+	ctx.Build.OpenFile = func(s string) (io.ReadCloser, error) { return os.Open(s) }
+	ctx.Build.ReadDir = ioutil.ReadDir
+	ctx.Build.JoinPath = filepath.Join
+	return ctx
 }
 
 // Package represents a Go package.
@@ -95,10 +98,10 @@ const (
 	LoadUnexported
 )
 
-// LoadPackage Import returns details about the Go package named by the import
+// LoadPackage returns details about the Go package named by the import
 // path, interpreting local import paths relative to the srcDir directory.
-func LoadPackage(importPath string, srcDir string, flags int) (*Package, error) {
-	bpkg, err := build.Default.Import(importPath, srcDir, build.ImportComment)
+func (ctx *Context) LoadPackage(importPath string, srcDir string, flags int) (*Package, error) {
+	bpkg, err := ctx.Build.Import(importPath, srcDir, build.ImportComment)
 	if _, ok := err.(*build.NoGoError); ok {
 		return &Package{Build: bpkg}, nil
 	}
@@ -113,7 +116,7 @@ func LoadPackage(importPath string, srcDir string, flags int) (*Package, error) 
 
 	files := make(map[string]*ast.File)
 	for _, name := range append(pkg.Build.GoFiles, pkg.Build.CgoFiles...) {
-		file, err := pkg.parseFile(name)
+		file, err := pkg.parseFile(&ctx.Build, name)
 		if err != nil {
 			pkg.Errors = append(pkg.Errors, err)
 			continue
@@ -140,7 +143,7 @@ func LoadPackage(importPath string, srcDir string, flags int) (*Package, error) 
 
 	if flags&LoadExamples != 0 {
 		for _, name := range append(pkg.Build.TestGoFiles, pkg.Build.XTestGoFiles...) {
-			file, err := pkg.parseFile(name)
+			file, err := pkg.parseFile(&ctx.Build, name)
 			if err != nil {
 				pkg.Errors = append(pkg.Errors, err)
 				continue
@@ -158,8 +161,13 @@ func (s byFuncName) Len() int           { return len(s) }
 func (s byFuncName) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s byFuncName) Less(i, j int) bool { return s[i].Name < s[j].Name }
 
-func (pkg *Package) parseFile(name string) (*ast.File, error) {
-	p, err := ioutil.ReadFile(filepath.Join(pkg.Build.Dir, name))
+func (pkg *Package) parseFile(ctx *build.Context, name string) (*ast.File, error) {
+	f, err := ctx.OpenFile(ctx.JoinPath(pkg.Build.Dir, name))
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	p, err := ioutil.ReadAll(f)
 	if err != nil {
 		return nil, err
 	}

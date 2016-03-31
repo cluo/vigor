@@ -10,17 +10,16 @@ import (
 	"go/parser"
 	"go/token"
 	"io"
-	"io/ioutil"
 	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 
-	"vigor/util"
+	"vigor/context"
 )
 
-func completePackage(cwd string, src io.Reader, arg string) (completions []string) {
+func completePackage(ctx *context.Context, cwd string, src io.Reader, arg string) (completions []string) {
 	switch {
 	case arg == ".":
 		completions = []string{"./", "../"}
@@ -28,12 +27,12 @@ func completePackage(cwd string, src io.Reader, arg string) (completions []strin
 		completions = []string{"../"}
 	case strings.HasPrefix(arg, "."):
 		// Complete using relative directory.
-		bpkg, err := build.Import(".", cwd, build.FindOnly)
+		bpkg, err := ctx.Build.Import(".", cwd, build.FindOnly)
 		if err != nil {
 			return nil
 		}
 		dir, name := path.Split(arg)
-		fis, err := ioutil.ReadDir(filepath.Join(bpkg.Dir, filepath.FromSlash(dir)))
+		fis, err := ctx.Build.ReadDir(filepath.Join(bpkg.Dir, filepath.FromSlash(dir)))
 		if err != nil {
 			return nil
 		}
@@ -47,7 +46,7 @@ func completePackage(cwd string, src io.Reader, arg string) (completions []strin
 		}
 	case strings.HasPrefix(arg, "/"):
 		// Complete using full import path.
-		completions = completePackageByPath(arg)
+		completions = completePackageByPath(ctx, arg)
 	default:
 		// Complete with package names imported in current file.
 		for n := range readImports(cwd, src) {
@@ -63,20 +62,20 @@ func completePackage(cwd string, src io.Reader, arg string) (completions []strin
 	return completions
 }
 
-func resolvePackageSpec(cwd string, src io.Reader, spec string) string {
+func resolvePackageSpec(ctx *context.Context, cwd string, src io.Reader, spec string) string {
 	if strings.HasSuffix(spec, ".go") {
 		d := filepath.Dir(spec)
 		if !filepath.IsAbs(d) {
 			d = filepath.Join(cwd, d)
 		}
-		if bpkg, err := build.ImportDir(d, build.FindOnly); err == nil {
+		if bpkg, err := ctx.Build.ImportDir(d, build.FindOnly); err == nil {
 			return bpkg.ImportPath
 		}
 	}
 	path := strings.TrimRight(spec, "/")
 	switch {
 	case strings.HasPrefix(spec, "."):
-		if bpkg, err := build.Import(spec, cwd, build.FindOnly); err == nil {
+		if bpkg, err := ctx.Build.Import(spec, cwd, build.FindOnly); err == nil {
 			path = bpkg.ImportPath
 		}
 	case strings.HasPrefix(spec, "/"):
@@ -89,11 +88,11 @@ func resolvePackageSpec(cwd string, src io.Reader, spec string) string {
 	return path
 }
 
-func completePackageByPath(arg string) []string {
+func completePackageByPath(ctx *context.Context, arg string) []string {
 	var completions []string
 	dir, name := path.Split(arg[1:])
-	for _, srcDir := range build.Default.SrcDirs() {
-		fis, err := ioutil.ReadDir(filepath.Join(srcDir, filepath.FromSlash(dir)))
+	for _, srcDir := range ctx.Build.SrcDirs() {
+		fis, err := ctx.Build.ReadDir(filepath.Join(srcDir, filepath.FromSlash(dir)))
 		if err != nil {
 			continue
 		}
@@ -109,8 +108,8 @@ func completePackageByPath(arg string) []string {
 	return completions
 }
 
-func completeSymMethod(importPath, symMethod string) (completions []string) {
-	pkg, err := util.LoadPackage(importPath, "", util.LoadDoc)
+func completeSymMethod(ctx *context.Context, importPath, symMethod string) (completions []string) {
+	pkg, err := ctx.LoadPackage(importPath, "", context.LoadDoc)
 	if err != nil {
 		return []string{symMethod}
 	}
@@ -188,7 +187,7 @@ func readImports(cwd string, src io.Reader) map[string]string {
 					set[spec.Name.Name] = true
 				}
 			} else {
-				name := util.GuessPackageNameFromPath(path)
+				name := context.GuessPackageNameFromPath(path)
 				if !set[path] {
 					paths[name] = path
 				}

@@ -11,11 +11,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"vigor/util"
+	"vigor/context"
 )
 
-func findDef(cwd, importPath, symbol string) (string, int, int, error) {
-	pkg, err := util.LoadPackage(importPath, cwd, util.LoadDoc|util.LoadUnexported)
+func findDef(ctx *context.Context, cwd, importPath, symbol string) (string, int, int, error) {
+	pkg, err := ctx.LoadPackage(importPath, cwd, context.LoadDoc|context.LoadUnexported)
 	if err != nil {
 		return "", 0, 0, err
 	}
@@ -59,7 +59,7 @@ func findDef(cwd, importPath, symbol string) (string, int, int, error) {
 	return "", 0, 0, fmt.Errorf("%s not found in %s", symbol, pkg.Build.ImportPath)
 }
 
-func declPosition(pkg *util.Package, n ast.Node) (string, int, int, error) {
+func declPosition(pkg *context.Package, n ast.Node) (string, int, int, error) {
 	p := pkg.FSet.Position(n.Pos())
 	return filepath.Join(pkg.Build.Dir, p.Filename), p.Line, p.Column, nil
 }

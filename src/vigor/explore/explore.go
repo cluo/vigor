@@ -13,7 +13,7 @@ import (
 	"strings"
 	"sync"
 
-	"vigor/util"
+	"vigor/context"
 
 	"github.com/garyburd/neovim-go/vim"
 	"github.com/garyburd/neovim-go/vim/plugin"
@@ -28,11 +28,10 @@ var state = struct {
 }
 
 func init() {
-	plugin.HandleCommand("Godoc", &plugin.CommandOptions{NArgs: "*", Complete: "customlist,QQQDocComplete", Eval: "[getcwd(), 0]"}, onDoc)
-	plugin.HandleCommand("Pgodoc", &plugin.CommandOptions{NArgs: "*", Complete: "customlist,QQQDocComplete", Eval: "[getcwd(), 1]"}, onDoc)
-	plugin.HandleCommand("Godef", &plugin.CommandOptions{NArgs: "*", Complete: "customlist,QQQDocComplete", Eval: "getcwd()"}, onDef)
-	plugin.HandleFunction("QQQDocComplete", &plugin.FunctionOptions{Eval: "getcwd()"}, onComplete)
-	plugin.HandleAutocmd("BufReadCmd", &plugin.AutocmdOptions{Pattern: protoSlashSlash + "**", Eval: "[expand('%'), getcwd()]"}, onBufReadCmd)
+	plugin.HandleCommand("Godoc", &plugin.CommandOptions{NArgs: "*", Complete: "customlist,QQQDocComplete", Eval: "*"}, onDoc)
+	plugin.HandleCommand("Godef", &plugin.CommandOptions{NArgs: "*", Complete: "customlist,QQQDocComplete", Eval: "*"}, onDef)
+	plugin.HandleFunction("QQQDocComplete", &plugin.FunctionOptions{Eval: "*"}, onComplete)
+	plugin.HandleAutocmd("BufReadCmd", &plugin.AutocmdOptions{Pattern: protoSlashSlash + "**", Eval: "*"}, onBufReadCmd)
 	plugin.Handle("doc.onBufDelete", onBufDelete)
 	plugin.Handle("doc.onBufWinEnter", onBufWinEnter)
 	plugin.Handle("doc.onJump", onJump)
@@ -50,12 +49,11 @@ func expandSpec(v *vim.Vim, spec string) (string, error) {
 	return spec, err
 }
 
-type onDocEval struct {
-	Cwd     string `msgpack:",array"`
-	Preview bool
-}
+func onDoc(v *vim.Vim, args []string, eval *struct {
+	Env context.Env
+	Cwd string `eval:"getcwd()"`
+}) error {
 
-func onDoc(v *vim.Vim, args []string, eval *onDocEval) error {
 	if len(args) < 1 || len(args) > 2 {
 		return errors.New("one or two arguments required")
 	}
@@ -65,73 +63,25 @@ func onDoc(v *vim.Vim, args []string, eval *onDocEval) error {
 		return err
 	}
 
-	cleanup := util.WithGoBuildForPath(eval.Cwd)
-	path := resolvePackageSpec(eval.Cwd, vimutil.CurrentBufferReader(v), spec)
-	cleanup()
+	ctx := context.Get(&eval.Env, v)
+	path := resolvePackageSpec(ctx, eval.Cwd, vimutil.CurrentBufferReader(v), spec)
 
 	var sym string
 	if len(args) >= 2 {
 		sym = strings.Trim(args[1], ".")
 	}
-
-	editCommand := "edit"
-	if eval.Preview {
-		editCommand = "pedit"
-	}
-	/*
-	   This commented out code opens the documentation in a window that's already
-	   showing the documentationn or in a new tab.
-
-	   b, err := v.CurrentBuffer()
-	   if err != nil {
-	       return err
-	   }
-
-	   var ft string
-	   if err := v.BufferOption(b, "filetype", &ft); err != nil {
-	       return err
-	   }
-	   if ft != "godoc" {
-	       editCommand = "tabnew"
-	       windows, err := v.Windows()
-	       if err != nil {
-	           return err
-	       }
-	       buffers := make([]vim.Buffer, len(windows))
-	       p := v.NewPipeline()
-	       for i := range buffers {
-	           p.WindowBuffer(windows[i], &buffers[i])
-	       }
-	       if err := p.Wait(); err != nil {
-	           return err
-	       }
-	       fts := make([]string, len(buffers))
-	       for i := range fts {
-	           p.BufferOption(buffers[i], "filetype", &fts[i])
-	       }
-	       if err := p.Wait(); err != nil {
-	           return err
-	       }
-	       for i := range fts {
-	           if ft == "godoc" {
-	               if err := v.SetCurrentWindow(windows[i]); err != nil {
-	                   return err
-	               }
-	               editCommand = "edit"
-	               break
-	           }
-	       }
-	   }
-	*/
 
 	sharp := ""
 	if sym != "" {
 		sharp = "\\#"
 	}
-	return v.Command(fmt.Sprintf("%s %s%s%s%s", editCommand, protoSlashSlash, path, sharp, sym))
+	return v.Command(fmt.Sprintf("%s %s%s%s%s", "edit", protoSlashSlash, path, sharp, sym))
 }
 
-func onDef(v *vim.Vim, args []string, cwd string) error {
+func onDef(v *vim.Vim, args []string, eval *struct {
+	Env context.Env
+	Cwd string `eval:"getcwd()"`
+}) error {
 	if len(args) < 1 || len(args) > 2 {
 		return errors.New("one or two arguments required")
 	}
@@ -141,15 +91,15 @@ func onDef(v *vim.Vim, args []string, cwd string) error {
 		return err
 	}
 
-	defer util.WithGoBuildForPath(cwd)()
-	path := resolvePackageSpec(cwd, vimutil.CurrentBufferReader(v), spec)
+	ctx := context.Get(&eval.Env, v)
+	path := resolvePackageSpec(ctx, eval.Cwd, vimutil.CurrentBufferReader(v), spec)
 
 	var sym string
 	if len(args) >= 2 {
 		sym = strings.Trim(args[1], ".")
 	}
 
-	file, line, col, err := findDef(cwd, path, sym)
+	file, line, col, err := findDef(ctx, eval.Cwd, path, sym)
 
 	if err != nil {
 		return errors.New("definition not found")
@@ -166,8 +116,13 @@ func onDef(v *vim.Vim, args []string, cwd string) error {
 	return p.Wait()
 }
 
-func onComplete(v *vim.Vim, a *vimutil.CommandCompletionArgs, cwd string) ([]string, error) {
-	defer util.WithGoBuildForPath(cwd)()
+func onComplete(v *vim.Vim, a *vimutil.CommandCompletionArgs, eval *struct {
+	Env context.Env
+	Cwd string `eval:"getcwd()"`
+}) ([]string, error) {
+
+	ctx := context.Get(&eval.Env, v)
+
 	f := strings.Fields(a.CmdLine)
 	var completions []string
 	if len(f) >= 3 || (len(f) == 2 && a.ArgLead == "") {
@@ -175,19 +130,21 @@ func onComplete(v *vim.Vim, a *vimutil.CommandCompletionArgs, cwd string) ([]str
 		if err != nil {
 			return nil, err
 		}
-		completions = completeSymMethod(resolvePackageSpec(cwd, vimutil.CurrentBufferReader(v), spec), a.ArgLead)
+		completions = completeSymMethod(ctx, resolvePackageSpec(ctx, eval.Cwd, vimutil.CurrentBufferReader(v), spec), a.ArgLead)
 	} else {
-		completions = completePackage(cwd, vimutil.CurrentBufferReader(v), a.ArgLead)
+		completions = completePackage(ctx, eval.Cwd, vimutil.CurrentBufferReader(v), a.ArgLead)
 	}
 	return completions, nil
 }
 
-type bufReadEval struct {
-	Name string `msgpack:",array"`
-	Cwd  string
-}
+func onBufReadCmd(v *vim.Vim, eval *struct {
+	Env  context.Env
+	Cwd  string `eval:"getcwd()"`
+	Name string `eval:"expand('%')"`
+}) error {
 
-func onBufReadCmd(v *vim.Vim, eval *bufReadEval) error {
+	ctx := context.Get(&eval.Env, v)
+
 	var (
 		b vim.Buffer
 		w vim.Window
@@ -203,9 +160,7 @@ func onBufReadCmd(v *vim.Vim, eval *bufReadEval) error {
 	delete(state.m, int(b))
 	state.Unlock()
 
-	defer util.WithGoBuildForPath(eval.Cwd)()
-
-	lines, bd, err := print(eval.Name, eval.Cwd)
+	lines, bd, err := print(ctx, eval.Name, eval.Cwd)
 	if err != nil {
 		p.SetBufferOption(b, "readonly", false)
 		p.SetBufferOption(b, "modifiable", true)

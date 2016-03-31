@@ -7,9 +7,12 @@ package format
 
 import (
 	"bytes"
-	"go/scanner"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"strconv"
 
-	"vigor/util"
+	"vigor/context"
 
 	"github.com/garyburd/neovim-go/vim"
 	"github.com/garyburd/neovim-go/vim/plugin"
@@ -18,7 +21,7 @@ import (
 )
 
 func init() {
-	plugin.HandleCommand("Fmt", &plugin.CommandOptions{Range: "%", Eval: "expand('%:p')"}, format)
+	plugin.HandleCommand("Fmt", &plugin.CommandOptions{Range: "%", Eval: "*"}, format)
 }
 
 var options = imports.Options{
@@ -28,63 +31,59 @@ var options = imports.Options{
 	TabWidth:  8,
 }
 
-func format(v *vim.Vim, r [2]int, file string) error {
-	defer util.WithGoBuildForPath(file)()
+var errorPat = regexp.MustCompile(`^([^:]+):(\d+)(?::(\d+))?(.*)`)
+
+func format(v *vim.Vim, r [2]int, eval *struct {
+	Env context.Env
+}) error {
 
 	b, err := v.CurrentBuffer()
 	if err != nil {
 		return err
 	}
 
-	in, err := v.BufferLineSlice(b, 0, -1, true, true)
-	if err != nil {
-		return err
+	var (
+		in    [][]byte
+		bufnr int
+		fname string
+	)
+	p := v.NewPipeline()
+	p.BufferLineSlice(b, 0, -1, true, true, &in)
+	p.BufferNumber(b, &bufnr)
+	p.BufferName(b, &fname)
+	if err := p.Wait(); err != nil {
+		return nil
 	}
 
-	buf, err := imports.Process("", bytes.Join(in, []byte{'\n'}), &options)
-	if err != nil {
-		return reportErrors(v, b, err)
+	var stdout, stderr bytes.Buffer
+	c := exec.Command("goimports", "-srcdir", filepath.Dir(fname))
+	c.Stdin = bytes.NewReader(bytes.Join(in, []byte{'\n'}))
+	c.Stdout = &stdout
+	c.Stderr = &stderr
+	c.Env = context.Get(&eval.Env, v).Environ
+	err = c.Run()
+	if err == nil {
+		out := bytes.Split(bytes.TrimSuffix(stdout.Bytes(), []byte{'\n'}), []byte{'\n'})
+		return minUpdate(v, b, in, out)
 	}
-
-	out := bytes.Split(bytes.TrimSuffix(buf, []byte{'\n'}), []byte{'\n'})
-	return minUpdate(v, b, in, out)
-}
-
-func reportErrors(v *vim.Vim, b vim.Buffer, formatErr error) error {
-	var qfl []*vimutil.QuickfixError
-	if e, ok := formatErr.(scanner.Error); ok {
-		qfl = append(qfl, &vimutil.QuickfixError{
-			LNum: e.Pos.Line,
-			Col:  e.Pos.Column,
-			Text: e.Msg,
-		})
-	} else if el, ok := formatErr.(scanner.ErrorList); ok {
-		for _, e := range el {
-			qfl = append(qfl, &vimutil.QuickfixError{
-				LNum: e.Pos.Line,
-				Col:  e.Pos.Column,
-				Text: e.Msg,
-			})
+	if _, ok := err.(*exec.ExitError); ok {
+		var qfl []*vimutil.QuickfixError
+		for _, m := range errorPat.FindAllSubmatch(stderr.Bytes(), -1) {
+			qfe := vimutil.QuickfixError{}
+			qfe.LNum, _ = strconv.Atoi(string(m[2]))
+			qfe.Col, _ = strconv.Atoi(string(m[3]))
+			qfe.Text = string(bytes.TrimSpace(m[4]))
+			qfe.Bufnr = bufnr
+			qfl = append(qfl, &qfe)
+		}
+		if len(qfl) > 0 {
+			p := v.NewPipeline()
+			p.Call("setqflist", nil, qfl)
+			p.Command("cc")
+			return p.Wait()
 		}
 	}
-
-	if len(qfl) == 0 {
-		return formatErr
-	}
-
-	bufnr, err := v.BufferNumber(b)
-	if err != nil {
-		return err
-	}
-	for i := range qfl {
-		qfl[i].Bufnr = bufnr
-	}
-
-	if err := v.Call("setqflist", nil, qfl); err != nil {
-		return err
-	}
-
-	return v.Command("cc")
+	return err
 }
 
 func minUpdate(v *vim.Vim, b vim.Buffer, in [][]byte, out [][]byte) error {
