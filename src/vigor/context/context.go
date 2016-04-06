@@ -19,8 +19,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-
-	"github.com/garyburd/neovim-go/vim"
 )
 
 type Env struct {
@@ -31,8 +29,12 @@ type Env struct {
 }
 
 type Context struct {
+	// Environ is the current environment in the form "key=value".
 	Environ []string
-	Build   build.Context
+
+	// Build is a build.Context configured for the current environment. This
+	// context ignores modified buffers in Neovim.
+	Build build.Context
 
 	env *Env
 	mu  sync.Mutex
@@ -43,7 +45,8 @@ var (
 	mu  sync.Mutex
 )
 
-func Get(env *Env, v *vim.Vim) *Context {
+// Get returns a context for the specified environment.
+func Get(env *Env) *Context {
 	mu.Lock()
 	defer mu.Unlock()
 	if ctx != nil && *ctx.env == *env {

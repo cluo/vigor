@@ -7,6 +7,8 @@ package doc
 import (
 	"os"
 	"testing"
+
+	"vigor/context"
 )
 
 var docTests = []string{
@@ -16,9 +18,10 @@ var docTests = []string{
 }
 
 func TestDoc(t *testing.T) {
+	ctx := context.Get(&context.Env{})
 	cwd, _ := os.Getwd()
 	for _, tt := range docTests {
-		_, _, err := print(tt, cwd)
+		_, _, err := print(ctx, tt, cwd)
 		if err != nil {
 			t.Error(tt, err)
 		}

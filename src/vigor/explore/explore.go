@@ -17,7 +17,6 @@ import (
 
 	"github.com/garyburd/neovim-go/vim"
 	"github.com/garyburd/neovim-go/vim/plugin"
-	"github.com/garyburd/neovim-go/vim/vimutil"
 )
 
 var state = struct {
@@ -63,8 +62,8 @@ func onDoc(v *vim.Vim, args []string, eval *struct {
 		return err
 	}
 
-	ctx := context.Get(&eval.Env, v)
-	path := resolvePackageSpec(ctx, eval.Cwd, vimutil.CurrentBufferReader(v), spec)
+	ctx := context.Get(&eval.Env)
+	path := resolvePackageSpec(ctx, eval.Cwd, vim.NewBufferReader(v, 0), spec)
 
 	var sym string
 	if len(args) >= 2 {
@@ -91,8 +90,8 @@ func onDef(v *vim.Vim, args []string, eval *struct {
 		return err
 	}
 
-	ctx := context.Get(&eval.Env, v)
-	path := resolvePackageSpec(ctx, eval.Cwd, vimutil.CurrentBufferReader(v), spec)
+	ctx := context.Get(&eval.Env)
+	path := resolvePackageSpec(ctx, eval.Cwd, vim.NewBufferReader(v, 0), spec)
 
 	var sym string
 	if len(args) >= 2 {
@@ -116,12 +115,12 @@ func onDef(v *vim.Vim, args []string, eval *struct {
 	return p.Wait()
 }
 
-func onComplete(v *vim.Vim, a *vimutil.CommandCompletionArgs, eval *struct {
+func onComplete(v *vim.Vim, a *vim.CommandCompletionArgs, eval *struct {
 	Env context.Env
 	Cwd string `eval:"getcwd()"`
 }) ([]string, error) {
 
-	ctx := context.Get(&eval.Env, v)
+	ctx := context.Get(&eval.Env)
 
 	f := strings.Fields(a.CmdLine)
 	var completions []string
@@ -130,9 +129,9 @@ func onComplete(v *vim.Vim, a *vimutil.CommandCompletionArgs, eval *struct {
 		if err != nil {
 			return nil, err
 		}
-		completions = completeSymMethod(ctx, resolvePackageSpec(ctx, eval.Cwd, vimutil.CurrentBufferReader(v), spec), a.ArgLead)
+		completions = completeSymMethod(ctx, resolvePackageSpec(ctx, eval.Cwd, vim.NewBufferReader(v, 0), spec), a.ArgLead)
 	} else {
-		completions = completePackage(ctx, eval.Cwd, vimutil.CurrentBufferReader(v), a.ArgLead)
+		completions = completePackage(ctx, eval.Cwd, vim.NewBufferReader(v, 0), a.ArgLead)
 	}
 	return completions, nil
 }
@@ -143,7 +142,7 @@ func onBufReadCmd(v *vim.Vim, eval *struct {
 	Name string `eval:"expand('%')"`
 }) error {
 
-	ctx := context.Get(&eval.Env, v)
+	ctx := context.Get(&eval.Env)
 
 	var (
 		b vim.Buffer
@@ -164,7 +163,7 @@ func onBufReadCmd(v *vim.Vim, eval *struct {
 	if err != nil {
 		p.SetBufferOption(b, "readonly", false)
 		p.SetBufferOption(b, "modifiable", true)
-		p.SetBufferLineSlice(b, 0, -1, true, true, bytes.Split([]byte(err.Error()), []byte{'\n'}))
+		p.SetBufferLines(b, 0, -1, true, bytes.Split([]byte(err.Error()), []byte{'\n'}))
 		p.SetBufferOption(b, "buftype", "nofile")
 		p.SetBufferOption(b, "bufhidden", "delete")
 		p.SetBufferOption(b, "buflisted", false)
@@ -180,7 +179,7 @@ func onBufReadCmd(v *vim.Vim, eval *struct {
 
 	p.SetBufferOption(b, "readonly", false)
 	p.SetBufferOption(b, "modifiable", true)
-	p.SetBufferLineSlice(b, 0, -1, true, true, lines)
+	p.SetBufferLines(b, 0, -1, true, lines)
 	p.SetBufferOption(b, "buftype", "nofile")
 	p.SetBufferOption(b, "bufhidden", "hide")
 	p.SetBufferOption(b, "buflisted", false)

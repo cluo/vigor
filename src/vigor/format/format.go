@@ -16,19 +16,10 @@ import (
 
 	"github.com/garyburd/neovim-go/vim"
 	"github.com/garyburd/neovim-go/vim/plugin"
-	"github.com/garyburd/neovim-go/vim/vimutil"
-	"golang.org/x/tools/imports"
 )
 
 func init() {
 	plugin.HandleCommand("Fmt", &plugin.CommandOptions{Range: "%", Eval: "*"}, format)
-}
-
-var options = imports.Options{
-	AllErrors: true,
-	Comments:  true,
-	TabIndent: true,
-	TabWidth:  8,
 }
 
 var errorPat = regexp.MustCompile(`^([^:]+):(\d+)(?::(\d+))?(.*)`)
@@ -48,7 +39,7 @@ func format(v *vim.Vim, r [2]int, eval *struct {
 		fname string
 	)
 	p := v.NewPipeline()
-	p.BufferLineSlice(b, 0, -1, true, true, &in)
+	p.BufferLines(b, 0, -1, true, &in)
 	p.BufferNumber(b, &bufnr)
 	p.BufferName(b, &fname)
 	if err := p.Wait(); err != nil {
@@ -60,16 +51,16 @@ func format(v *vim.Vim, r [2]int, eval *struct {
 	c.Stdin = bytes.NewReader(bytes.Join(in, []byte{'\n'}))
 	c.Stdout = &stdout
 	c.Stderr = &stderr
-	c.Env = context.Get(&eval.Env, v).Environ
+	c.Env = context.Get(&eval.Env).Environ
 	err = c.Run()
 	if err == nil {
 		out := bytes.Split(bytes.TrimSuffix(stdout.Bytes(), []byte{'\n'}), []byte{'\n'})
 		return minUpdate(v, b, in, out)
 	}
 	if _, ok := err.(*exec.ExitError); ok {
-		var qfl []*vimutil.QuickfixError
+		var qfl []*vim.QuickfixError
 		for _, m := range errorPat.FindAllSubmatch(stderr.Bytes(), -1) {
-			qfe := vimutil.QuickfixError{}
+			qfe := vim.QuickfixError{}
 			qfe.LNum, _ = strconv.Atoi(string(m[2]))
 			qfe.Col, _ = strconv.Atoi(string(m[3]))
 			qfe.Text = string(bytes.TrimSpace(m[4]))
@@ -119,15 +110,8 @@ func minUpdate(v *vim.Vim, b vim.Buffer, in [][]byte, out [][]byte) error {
 
 	// Update the buffer.
 
-	includeStart := true
 	start := head
 	end := len(in) - tail
 	repl := out[head : len(out)-tail]
-
-	if start == len(in) {
-		start = -1
-		includeStart = false
-	}
-
-	return v.SetBufferLineSlice(b, start, end, includeStart, false, repl)
+	return v.SetBufferLines(b, start, end, true, repl)
 }
