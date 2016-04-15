@@ -4,16 +4,23 @@
 		{
 			"importpath": "github.com/garyburd/neovim-go/msgpack",
 			"repository": "https://github.com/garyburd/neovim-go",
-			"revision": "224ddae5c320d99423193869bbcae8c74a7827c3",
+			"revision": "6d2309128163fe8e035fbc2cc8fa6ca5b8ae6a63",
 			"branch": "master",
 			"path": "/msgpack"
 		},
 		{
 			"importpath": "github.com/garyburd/neovim-go/vim",
 			"repository": "https://github.com/garyburd/neovim-go",
-			"revision": "224ddae5c320d99423193869bbcae8c74a7827c3",
+			"revision": "6d2309128163fe8e035fbc2cc8fa6ca5b8ae6a63",
 			"branch": "master",
 			"path": "/vim"
+		},
+		{
+			"importpath": "golang.org/x/tools/go/buildutil",
+			"repository": "https://go.googlesource.com/tools",
+			"revision": "4e3242e000c9086052d8d700ca255d64e2b9fdfb",
+			"branch": "master",
+			"path": "/go/buildutil"
 		}
 	]
 }

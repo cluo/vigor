@@ -1,20 +1,7 @@
 *vigor.txt* 	Go development plugin
 
                                                               *package-spec*
-PACKAGE SPECIFICATIONS
 
-Some Vigor commands take a package specification as an argument. The rules
-translating a package specification to a package are:
-
-1. If the specification is the path of a Go source file, then use the package
-containing the source file. The |cmdline-special| characters '%' and '#' are
-useful for specifying a source file.
-
-2. If the specification starts with "/", then use the remainder of the
-specification as an import path.
-
-3. The specification is taken as the name of a package imported in the current
-file.
 
 COMMANDS
 
@@ -23,24 +10,31 @@ COMMANDS
 
 Display Go package documentation. 
 
+The package is specified by one of the following:
+
+  - If the specification is the path of a Go source file, then use the package
+    containing the source file. The |cmdline-special| characters '%' and '#'
+    are useful for specifying a source file.
+
+  - If the specification starts with "/", then use the remainder of the
+    specification as an import path.
+
+  - The specification is taken as the name of a package imported in the
+    current file.
+
 The keyboard mappings for a documentation buffer are:
 
-  o       Jump to the source code for the current page.
-  -       Navigate up the documentation hierarchy.
-  CTRL-]  Jump to documentation for the entity under the cursor.
+  <CR>    Jump to underlined entity.
+  ]]      Jump to next declaration
+  [[      Jump to previous declaration
   g?      Show this help.
-
-:Pgodoc |package-spec| [symbol[.method]]                               *:Pgodoc*
-
-Display Go package documentation in the preview window. See the |:Godoc|
-command for more information.
 
                                                                      *:Godef*
 :Godef |package-spec| [symbol[.method]]
 
-Jump to definition of specified entity.
-
-     
+GoDef is like |:GoDoc|, except it jumps to the code instead of showing the
+documentation.
+ 
                                                                     *:Fmt*
 :Fmt
 

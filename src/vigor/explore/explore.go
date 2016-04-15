@@ -3,13 +3,13 @@
 // license that can be found in the LICENSE file.
 
 // Package explore implements the :Godoc and :Godef commands.
-package doc
+package explore
 
 import (
 	"bytes"
 	"errors"
 	"fmt"
-	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
@@ -19,22 +19,21 @@ import (
 	"github.com/garyburd/neovim-go/vim/plugin"
 )
 
-var state = struct {
+var docs = struct {
 	sync.Mutex
-	m map[int]*bufferData
+	m map[int]*doc
 }{
-	m: make(map[int]*bufferData),
+	m: make(map[int]*doc),
 }
 
 func init() {
 	plugin.HandleCommand("Godoc", &plugin.CommandOptions{NArgs: "*", Complete: "customlist,QQQDocComplete", Eval: "*"}, onDoc)
 	plugin.HandleCommand("Godef", &plugin.CommandOptions{NArgs: "*", Complete: "customlist,QQQDocComplete", Eval: "*"}, onDef)
 	plugin.HandleFunction("QQQDocComplete", &plugin.FunctionOptions{Eval: "*"}, onComplete)
-	plugin.HandleAutocmd("BufReadCmd", &plugin.AutocmdOptions{Pattern: protoSlashSlash + "**", Eval: "*"}, onBufReadCmd)
-	plugin.Handle("doc.onBufDelete", onBufDelete)
-	plugin.Handle("doc.onBufWinEnter", onBufWinEnter)
-	plugin.Handle("doc.onJump", onJump)
-	plugin.Handle("doc.onUp", onUp)
+	plugin.HandleAutocmd("BufReadCmd", &plugin.AutocmdOptions{Pattern: bufNamePrefix + "**", Eval: "*"}, onBufReadCmd)
+	plugin.Handle("explorer.onUpdateHighlight", onUpdateHighlight)
+	plugin.Handle("explorer.onBufDelete", onBufDelete)
+	plugin.Handle("explorer.onJump", onJump)
 }
 
 func expandSpec(v *vim.Vim, spec string) (string, error) {
@@ -49,8 +48,9 @@ func expandSpec(v *vim.Vim, spec string) (string, error) {
 }
 
 func onDoc(v *vim.Vim, args []string, eval *struct {
-	Env context.Env
-	Cwd string `eval:"getcwd()"`
+	Env  context.Env
+	Cwd  string `eval:"getcwd()"`
+	Name string `eval:"expand('%')"`
 }) error {
 
 	if len(args) < 1 || len(args) > 2 {
@@ -63,18 +63,20 @@ func onDoc(v *vim.Vim, args []string, eval *struct {
 	}
 
 	ctx := context.Get(&eval.Env)
-	path := resolvePackageSpec(ctx, eval.Cwd, vim.NewBufferReader(v, 0), spec)
+	name := bufNamePrefix + resolvePackageSpec(&ctx.Build, eval.Cwd, vim.NewBufferReader(v, 0), spec)
 
-	var sym string
+	var cmds []string
+	if name != eval.Name {
+		cmds = append(cmds, "edit "+name)
+	}
+
 	if len(args) >= 2 {
-		sym = strings.Trim(args[1], ".")
+		cmds = append(cmds, fmt.Sprintf("call cursor(get(b:anchors, %q, [0, 0]))", strings.Trim(args[1], ".")))
 	}
-
-	sharp := ""
-	if sym != "" {
-		sharp = "\\#"
+	if len(cmds) == 0 {
+		return nil
 	}
-	return v.Command(fmt.Sprintf("%s %s%s%s%s", "edit", protoSlashSlash, path, sharp, sym))
+	return v.Command(strings.Join(cmds, " | "))
 }
 
 func onDef(v *vim.Vim, args []string, eval *struct {
@@ -91,28 +93,19 @@ func onDef(v *vim.Vim, args []string, eval *struct {
 	}
 
 	ctx := context.Get(&eval.Env)
-	path := resolvePackageSpec(ctx, eval.Cwd, vim.NewBufferReader(v, 0), spec)
+	path := resolvePackageSpec(&ctx.Build, eval.Cwd, vim.NewBufferReader(v, 0), spec)
 
 	var sym string
 	if len(args) >= 2 {
 		sym = strings.Trim(args[1], ".")
 	}
 
-	file, line, col, err := findDef(ctx, eval.Cwd, path, sym)
-
+	file, line, col, err := findDef(&ctx.Build, eval.Cwd, path, sym)
 	if err != nil {
 		return errors.New("definition not found")
 	}
 
-	p := v.NewPipeline()
-	p.Command(fmt.Sprintf("edit %s", file))
-	if line != 0 {
-		p.Command(fmt.Sprintf("%d", line))
-	}
-	if col != 0 {
-		p.Command(fmt.Sprintf("normal! %d|", col))
-	}
-	return p.Wait()
+	return v.Command(fmt.Sprintf("edit %s | call cursor([%d, %d])", file, line, col))
 }
 
 func onComplete(v *vim.Vim, a *vim.CommandCompletionArgs, eval *struct {
@@ -129,9 +122,9 @@ func onComplete(v *vim.Vim, a *vim.CommandCompletionArgs, eval *struct {
 		if err != nil {
 			return nil, err
 		}
-		completions = completeSymMethod(ctx, resolvePackageSpec(ctx, eval.Cwd, vim.NewBufferReader(v, 0), spec), a.ArgLead)
+		completions = completeSymMethodArg(&ctx.Build, resolvePackageSpec(&ctx.Build, eval.Cwd, vim.NewBufferReader(v, 0), spec), a.ArgLead)
 	} else {
-		completions = completePackage(ctx, eval.Cwd, vim.NewBufferReader(v, 0), a.ArgLead)
+		completions = completePackageArg(&ctx.Build, eval.Cwd, vim.NewBufferReader(v, 0), a.ArgLead)
 	}
 	return completions, nil
 }
@@ -144,23 +137,18 @@ func onBufReadCmd(v *vim.Vim, eval *struct {
 
 	ctx := context.Get(&eval.Env)
 
-	var (
-		b vim.Buffer
-		w vim.Window
-	)
-	p := v.NewPipeline()
-	p.CurrentBuffer(&b)
-	p.CurrentWindow(&w)
-	if err := p.Wait(); err != nil {
+	b, err := v.CurrentBuffer()
+	if err != nil {
 		return err
 	}
 
-	state.Lock()
-	delete(state.m, int(b))
-	state.Unlock()
+	docs.Lock()
+	delete(docs.m, int(b))
+	docs.Unlock()
 
-	lines, bd, err := print(ctx, eval.Name, eval.Cwd)
+	d, err := printDoc(&ctx.Build, eval.Name, eval.Cwd)
 	if err != nil {
+		p := v.NewPipeline()
 		p.SetBufferOption(b, "readonly", false)
 		p.SetBufferOption(b, "modifiable", true)
 		p.SetBufferLines(b, 0, -1, true, bytes.Split([]byte(err.Error()), []byte{'\n'}))
@@ -177,9 +165,10 @@ func onBufReadCmd(v *vim.Vim, eval *struct {
 		return err
 	}
 
+	p := v.NewPipeline()
 	p.SetBufferOption(b, "readonly", false)
 	p.SetBufferOption(b, "modifiable", true)
-	p.SetBufferLines(b, 0, -1, true, lines)
+	p.SetBufferLines(b, 0, -1, true, bytes.Split(d.text, []byte{'\n'}))
 	p.SetBufferOption(b, "buftype", "nofile")
 	p.SetBufferOption(b, "bufhidden", "hide")
 	p.SetBufferOption(b, "buflisted", false)
@@ -187,104 +176,139 @@ func onBufReadCmd(v *vim.Vim, eval *struct {
 	p.SetBufferOption(b, "modifiable", false)
 	p.SetBufferOption(b, "readonly", true)
 	p.SetBufferOption(b, "tabstop", 4)
-	p.SetWindowOption(w, "conceallevel", 3)
-	p.SetWindowOption(w, "concealcursor", "nv")
 	p.Command("autocmd! * <buffer>")
-	p.Command(fmt.Sprintf("autocmd BufDelete <buffer> call rpcnotify(%d, 'doc.onBufDelete', %d)", channelID, int(b)))
-	p.Command(fmt.Sprintf("autocmd BufWinEnter <buffer> call rpcrequest(%d, 'doc.onBufWinEnter', %d)", channelID, int(b)))
-	p.Command("autocmd BufWinLeave <buffer> call clearmatches()")
-	p.Command(`syntax region godocCode start='\%^.' end='^[^ \t)}]'me=e-1 contains=godocComment`)
-	p.Command(`syntax region godocCode matchgroup=helpIgnore start=' >$' start='^>$' end='^[^ \t]'me=e-1 end='^<' concealends contains=godocComment`)
-	p.Command(`syntax region godocComment start='/\*' end='\*/'  contained`)
-	p.Command(`syntax region godocComment start='//' end='$' contained`)
-	p.Command(`syntax match godocHead '^.*\ze\~$' nextgroup=godocIgnore`)
-	p.Command(`syntax match godocIgnore '.' conceal contained`)
-	p.Command(`highlight link godocComment Comment`)
-	p.Command(`highlight link godocHead Statement`)
-	p.Command(`highlight link godocCode Statement`)
-	p.Command(`highlight link godocIgnore Ignore`)
-	for _, f := range bd.folds {
+	p.Command(fmt.Sprintf("autocmd BufDelete <buffer> call rpcnotify(%d, 'explorer.onBufDelete', %d)", channelID, int(b)))
+	p.Command(fmt.Sprintf("autocmd CursorMoved <buffer> call rpcrequest(%d, 'explorer.onUpdateHighlight', %d, line('.'), col('.'))", channelID, int(b)))
+	p.Command(fmt.Sprintf("autocmd BufWinLeave <buffer> call rpcrequest(%d, 'explorer.onUpdateHighlight', %d, -1, -1)", channelID, int(b)))
+	p.ClearBufferHighlight(b, -1, 0, -1)
+	for _, h := range d.highlights {
+		lstart, cstart := h.start.line(), h.start.column()
+		lend, cend := h.end.line(), h.end.column()
+		for l := lstart; l < lend; l++ {
+			var id int
+			p.AddBufferHighlight(b, -1, h.group, l-1, cstart-1, -1, &id)
+			cstart = 1
+		}
+		var id int
+		p.AddBufferHighlight(b, -1, h.group, lend-1, cstart-1, cend-1, &id)
+	}
+	for _, f := range d.folds {
 		p.Command(fmt.Sprintf("%d,%dfold", f[0], f[1]))
 	}
-	p.Command(fmt.Sprintf("nnoremap <buffer> <silent> <c-]> :execute rpcrequest(%d, 'doc.onJump', %d, line('.'), col('.'))<CR>", channelID, int(b)))
-	p.Command(fmt.Sprintf("nnoremap <buffer> <silent> - :execute rpcrequest(%d, 'doc.onUp', expand('%%'))<CR>", channelID))
-	p.Command("nnoremap <buffer> <silent> g? :help :Godef")
-	if bd.file != "" {
-		c := `nnoremap <buffer> <silent> o :if &previewwindow \| wincmd p \| endif \| edit ` + bd.file
-		if bd.line != 0 {
-			c += fmt.Sprintf(`\| %d`, bd.line)
-		}
-		c += "<CR>"
-		p.Command(c)
+	anchors := make(map[string][2]int)
+	for n, a := range d.anchors {
+		anchors[n] = [2]int{a.line(), a.column()}
 	}
+	p.SetBufferVar(b, "anchors", anchors, nil)
+	p.Command(fmt.Sprintf("nnoremap <buffer> <silent> <CR> :<C-U>call rpcrequest(%d, 'explorer.onJump', %d, line('.'), col('.'))<CR>", channelID, int(b)))
+	p.Command("nnoremap <buffer> <silent> g? :<C-U>help :Godoc<CR>")
+	p.Command(`nnoremap <buffer> <silent> ]] :<C-U>call search('\C\v^[^ \t)}]', 'W')<CR>`)
+	p.Command(`nnoremap <buffer> <silent> [[ :<C-U>call search('\C\v^[^ \t)}]', 'Wb')<CR>`)
 	if err := p.Wait(); err != nil {
 		return err
 	}
 
-	state.Lock()
-	state.m[int(b)] = bd
-	state.Unlock()
+	docs.Lock()
+	docs.m[int(b)] = d
+	docs.Unlock()
 
 	return nil
 }
 
 func onBufDelete(v *vim.Vim, b int) {
-	state.Lock()
-	delete(state.m, b)
-	state.Unlock()
+	docs.Lock()
+	delete(docs.m, b)
+	docs.Unlock()
 }
 
-func onBufWinEnter(v *vim.Vim, b int) error {
-	state.Lock()
-	defer state.Unlock()
-	bd := state.m[b]
-	if bd == nil {
+func onJump(v *vim.Vim, b, line, col int) error {
+	d, link := findLink(b, line, col)
+	if link == nil {
 		return nil
 	}
-	p := v.NewPipeline()
-	p.Call("clearmatches", nil)
-	for _, l := range bd.links {
-		line, column := lineColumn(l.start)
-		p.Call("matchaddpos", nil, "Identifier", []interface{}{[]int{line, column, l.end - l.start}})
+	var cmds []string
+	if p := d.strings[link.path]; p != "" {
+		cmds = append(cmds, fmt.Sprintf("edit %s", p))
 	}
-	return p.Wait()
+
+	l, c := link.address.line(), link.address.column()
+	if l > 0 {
+		cmds = append(cmds, fmt.Sprintf("call cursor(%d, %d)", l, c))
+	} else if c >= 0 {
+		cmds = append(cmds, fmt.Sprintf("call cursor(get(b:anchors, \"%s\", [0, 0]))", d.strings[c]))
+	}
+	return v.Command(strings.Join(cmds, "| "))
 }
 
-func onJump(v *vim.Vim, b, line, col int) (string, error) {
-	state.Lock()
-	defer state.Unlock()
-
-	bd := state.m[b]
-	if bd == nil {
-		return "", nil
-	}
-
-	link := findLink(bd.links, line, col)
-	if link == nil {
-		return "", nil
-	}
-
-	cmd := "edit " + protoSlashSlash + link.path
-	if link.frag != "" {
-		cmd += "\\#" + link.frag
-	}
-	return cmd, nil
+type windowHighlight struct {
+	id   int
+	link *link
 }
 
-func onUp(v *vim.Vim, u string) (string, error) {
-	importPath, symbol, method := parseURI(u)
-	cmd := "edit " + protoSlashSlash
-	switch {
-	case method != "":
-		cmd += importPath + "\\#" + symbol
-	case symbol != "":
-		cmd += importPath
-	default:
-		importPath = filepath.Dir(importPath)
-		if importPath == "." {
-			importPath = ""
+var highlights = struct {
+	sync.Mutex
+	m map[vim.Window]*windowHighlight
+}{
+	m: make(map[vim.Window]*windowHighlight),
+}
+
+func onUpdateHighlight(v *vim.Vim, b, line, col int) error {
+
+	_, newLink := findLink(b, line, col)
+
+	w, err := v.CurrentWindow()
+	if err != nil {
+		return err
+	}
+
+	highlights.Lock()
+	defer highlights.Unlock()
+
+	hl := highlights.m[w]
+	var oldLink *link
+	if hl != nil {
+		oldLink = hl.link
+	}
+
+	if oldLink == newLink {
+		return nil
+	}
+
+	if hl != nil {
+		delete(highlights.m, w)
+		if err := v.Call("matchdelete", nil, hl.id); err != nil {
+			return err
 		}
-		cmd += importPath
 	}
-	return cmd, nil
+
+	if newLink != nil {
+		hl := &windowHighlight{link: newLink}
+		highlights.m[w] = hl
+		if err := v.Call("matchaddpos", &hl.id, "Underlined", [][3]int{{newLink.start.line(), newLink.start.column(), int(newLink.end - newLink.start)}}); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func findLink(b, line, col int) (*doc, *link) {
+	docs.Lock()
+	d := docs.m[b]
+	docs.Unlock()
+	if d == nil {
+		return nil, nil
+	}
+	p := newPosition(line, col)
+	i := sort.Search(len(d.links), func(i int) bool {
+		return d.links[i].end > p
+	})
+	if i >= len(d.links) {
+		return nil, nil
+	}
+	link := d.links[i]
+	if d.links[i].start.line() != line {
+		return nil, nil
+	}
+	return d, link
 }

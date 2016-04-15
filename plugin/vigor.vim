@@ -13,8 +13,7 @@ let s:specs = [
 \ {'type': 'autocmd', 'name': 'BufReadCmd', 'sync': 1, 'opts': {'eval': '{''Env'': {''GOROOT'': $GOROOT, ''GOPATH'': $GOPATH, ''GOOS'': $GOOS, ''GOARCH'': $GOARCH}, ''Cwd'': getcwd(), ''Name'': expand(''%'')}', 'pattern': 'godoc://**'}},
 \ {'type': 'command', 'name': 'Fmt', 'sync': 1, 'opts': {'eval': '{''Env'': {''GOROOT'': $GOROOT, ''GOPATH'': $GOPATH, ''GOOS'': $GOOS, ''GOARCH'': $GOARCH}}', 'range': '%'}},
 \ {'type': 'command', 'name': 'Godef', 'sync': 1, 'opts': {'complete': 'customlist,QQQDocComplete', 'eval': '{''Env'': {''GOROOT'': $GOROOT, ''GOPATH'': $GOPATH, ''GOOS'': $GOOS, ''GOARCH'': $GOARCH}, ''Cwd'': getcwd()}', 'nargs': '*'}},
-\ {'type': 'command', 'name': 'Godoc', 'sync': 1, 'opts': {'complete': 'customlist,QQQDocComplete', 'eval': '{''Env'': {''GOROOT'': $GOROOT, ''GOPATH'': $GOPATH, ''GOOS'': $GOOS, ''GOARCH'': $GOARCH}, ''Cwd'': getcwd()}', 'nargs': '*'}},
-\ {'type': 'command', 'name': 'Guru', 'sync': 1, 'opts': {'count': '0', 'eval': 'getcwd()', 'nargs': '*'}},
+\ {'type': 'command', 'name': 'Godoc', 'sync': 1, 'opts': {'complete': 'customlist,QQQDocComplete', 'eval': '{''Env'': {''GOROOT'': $GOROOT, ''GOPATH'': $GOPATH, ''GOOS'': $GOOS, ''GOARCH'': $GOARCH}, ''Cwd'': getcwd(), ''Name'': expand(''%'')}', 'nargs': '*'}},
 \ {'type': 'function', 'name': 'QQQDocComplete', 'sync': 1, 'opts': {'eval': '{''Env'': {''GOROOT'': $GOROOT, ''GOPATH'': $GOPATH, ''GOOS'': $GOOS, ''GOARCH'': $GOARCH}, ''Cwd'': getcwd()}'}},
 \ ]
 

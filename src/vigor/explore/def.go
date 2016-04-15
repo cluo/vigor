@@ -2,20 +2,19 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package doc
+package explore
 
 import (
 	"fmt"
 	"go/ast"
-	"go/doc"
+	"go/build"
+	godoc "go/doc"
 	"path/filepath"
 	"strings"
-
-	"vigor/context"
 )
 
-func findDef(ctx *context.Context, cwd, importPath, symbol string) (string, int, int, error) {
-	pkg, err := ctx.LoadPackage(importPath, cwd, context.LoadDoc|context.LoadUnexported)
+func findDef(ctx *build.Context, cwd, importPath, symbol string) (string, int, int, error) {
+	pkg, err := loadPackage(ctx, importPath, cwd, loadPackageDoc|loadPackageUnexported)
 	if err != nil {
 		return "", 0, 0, err
 	}
@@ -36,7 +35,7 @@ func findDef(ctx *context.Context, cwd, importPath, symbol string) (string, int,
 		}
 	} else {
 		untangleDoc(pkg.Doc)
-		for _, d := range [][]*doc.Value{pkg.Doc.Consts, pkg.Doc.Vars} {
+		for _, d := range [][]*godoc.Value{pkg.Doc.Consts, pkg.Doc.Vars} {
 			for _, d := range d {
 				for _, name := range d.Names {
 					if name == symbol {
@@ -59,7 +58,7 @@ func findDef(ctx *context.Context, cwd, importPath, symbol string) (string, int,
 	return "", 0, 0, fmt.Errorf("%s not found in %s", symbol, pkg.Build.ImportPath)
 }
 
-func declPosition(pkg *context.Package, n ast.Node) (string, int, int, error) {
+func declPosition(pkg *pkg, n ast.Node) (string, int, int, error) {
 	p := pkg.FSet.Position(n.Pos())
 	return filepath.Join(pkg.Build.Dir, p.Filename), p.Line, p.Column, nil
 }
