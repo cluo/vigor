@@ -72,20 +72,20 @@ func resolvePackageSpec(ctx *build.Context, cwd string, src io.Reader, spec stri
 			return bpkg.ImportPath
 		}
 	}
-	path := strings.TrimRight(spec, "/")
+	path := spec
 	switch {
 	case strings.HasPrefix(spec, "."):
 		if bpkg, err := ctx.Import(spec, cwd, build.FindOnly); err == nil {
 			path = bpkg.ImportPath
 		}
 	case strings.HasPrefix(spec, "/"):
-		path = path[1:]
+		path = spec[1:]
 	default:
 		if p, ok := readImports(cwd, src)[spec]; ok {
 			path = p
 		}
 	}
-	return path
+	return strings.TrimSuffix(path, "/")
 }
 
 func completePackageArgByPath(ctx *build.Context, cwd, arg string) []string {
