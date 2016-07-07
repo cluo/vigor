@@ -6,12 +6,16 @@
 package main
 
 import (
-	_ "vigor/explore"
-	_ "vigor/format"
+	"vigor/explore"
+	"vigor/format"
 
-	"github.com/garyburd/neovim-go/vim/plugin"
+	"github.com/neovim-go/vim/plugin"
 )
 
 func main() {
-	plugin.Main()
+	plugin.Main(func(p *plugin.Plugin) error {
+		explore.Register(p)
+		format.Register(p)
+		return nil
+	})
 }

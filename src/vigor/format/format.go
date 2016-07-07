@@ -14,12 +14,12 @@ import (
 
 	"vigor/context"
 
-	"github.com/garyburd/neovim-go/vim"
-	"github.com/garyburd/neovim-go/vim/plugin"
+	"github.com/neovim-go/vim"
+	"github.com/neovim-go/vim/plugin"
 )
 
-func init() {
-	plugin.HandleCommand("Fmt", &plugin.CommandOptions{Range: "%", Eval: "*"}, format)
+func Register(p *plugin.Plugin) {
+	p.HandleCommand(&plugin.CommandOptions{Name: "Fmt", Range: "%", Eval: "*"}, format)
 }
 
 var errorPat = regexp.MustCompile(`^([^:]+):(\d+)(?::(\d+))?(.*)`)

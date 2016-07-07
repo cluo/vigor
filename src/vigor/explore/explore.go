@@ -15,8 +15,8 @@ import (
 
 	"vigor/context"
 
-	"github.com/garyburd/neovim-go/vim"
-	"github.com/garyburd/neovim-go/vim/plugin"
+	"github.com/neovim-go/vim"
+	"github.com/neovim-go/vim/plugin"
 )
 
 var docs = struct {
@@ -26,14 +26,14 @@ var docs = struct {
 	m: make(map[int]*doc),
 }
 
-func init() {
-	plugin.HandleCommand("Godoc", &plugin.CommandOptions{NArgs: "*", Complete: "customlist,QQQDocComplete", Eval: "*"}, onDoc)
-	plugin.HandleCommand("Godef", &plugin.CommandOptions{NArgs: "*", Complete: "customlist,QQQDocComplete", Eval: "*"}, onDef)
-	plugin.HandleFunction("QQQDocComplete", &plugin.FunctionOptions{Eval: "*"}, onComplete)
-	plugin.HandleAutocmd("BufReadCmd", &plugin.AutocmdOptions{Pattern: bufNamePrefix + "**", Eval: "*"}, onBufReadCmd)
-	plugin.Handle("explorer.onUpdateHighlight", onUpdateHighlight)
-	plugin.Handle("explorer.onBufDelete", onBufDelete)
-	plugin.Handle("explorer.onJump", onJump)
+func Register(p *plugin.Plugin) {
+	p.HandleCommand(&plugin.CommandOptions{Name: "Godoc", NArgs: "*", Complete: "customlist,QQQDocComplete", Eval: "*"}, onDoc)
+	p.HandleCommand(&plugin.CommandOptions{Name: "Godef", NArgs: "*", Complete: "customlist,QQQDocComplete", Eval: "*"}, onDef)
+	p.HandleFunction(&plugin.FunctionOptions{Name: "QQQDocComplete", Eval: "*"}, onComplete)
+	p.HandleAutocmd(&plugin.AutocmdOptions{Event: "BufReadCmd", Pattern: bufNamePrefix + "**", Eval: "*"}, onBufReadCmd)
+	p.Handle("explorer.onUpdateHighlight", onUpdateHighlight)
+	p.Handle("explorer.onBufDelete", onBufDelete)
+	p.Handle("explorer.onJump", onJump)
 }
 
 func expandSpec(v *vim.Vim, spec string) (string, error) {
@@ -160,11 +160,7 @@ func onBufReadCmd(v *vim.Vim, eval *struct {
 		return p.Wait()
 	}
 
-	channelID, err := v.ChannelID()
-	if err != nil {
-		return err
-	}
-
+	channelID := v.ChannelID()
 	p := v.NewPipeline()
 	p.SetBufferOption(b, "readonly", false)
 	p.SetBufferOption(b, "modifiable", true)

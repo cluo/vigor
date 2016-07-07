@@ -2,23 +2,21 @@
 	"version": 0,
 	"dependencies": [
 		{
-			"importpath": "github.com/garyburd/neovim-go/msgpack",
-			"repository": "https://github.com/garyburd/neovim-go",
-			"revision": "6d2309128163fe8e035fbc2cc8fa6ca5b8ae6a63",
-			"branch": "master",
-			"path": "/msgpack"
+			"importpath": "github.com/neovim-go/msgpack",
+			"repository": "https://github.com/neovim-go/msgpack",
+			"revision": "b8a9f492dc4eaa3c3d58ae6764af642f5331f0d2",
+			"branch": "master"
 		},
 		{
-			"importpath": "github.com/garyburd/neovim-go/vim",
-			"repository": "https://github.com/garyburd/neovim-go",
-			"revision": "6d2309128163fe8e035fbc2cc8fa6ca5b8ae6a63",
-			"branch": "master",
-			"path": "/vim"
+			"importpath": "github.com/neovim-go/vim",
+			"repository": "https://github.com/neovim-go/vim",
+			"revision": "1e4217641f89197e36ecc0fbcf62d8c07e2d72b7",
+			"branch": "master"
 		},
 		{
 			"importpath": "golang.org/x/tools/go/buildutil",
 			"repository": "https://go.googlesource.com/tools",
-			"revision": "4e3242e000c9086052d8d700ca255d64e2b9fdfb",
+			"revision": "527b253f588776e5f72a0a0d1e93195cd3f82707",
 			"branch": "master",
 			"path": "/go/buildutil"
 		}
