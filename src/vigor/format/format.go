@@ -14,8 +14,8 @@ import (
 
 	"vigor/context"
 
-	"github.com/neovim-go/vim"
-	"github.com/neovim-go/vim/plugin"
+	"github.com/neovim/go-client/nvim"
+	"github.com/neovim/go-client/nvim/plugin"
 )
 
 func Register(p *plugin.Plugin) {
@@ -24,7 +24,7 @@ func Register(p *plugin.Plugin) {
 
 var errorPat = regexp.MustCompile(`^([^:]+):(\d+)(?::(\d+))?(.*)`)
 
-func format(v *vim.Vim, r [2]int, eval *struct {
+func format(v *nvim.Nvim, r [2]int, eval *struct {
 	Env context.Env
 }) error {
 
@@ -58,9 +58,9 @@ func format(v *vim.Vim, r [2]int, eval *struct {
 		return minUpdate(v, b, in, out)
 	}
 	if _, ok := err.(*exec.ExitError); ok {
-		var qfl []*vim.QuickfixError
+		var qfl []*nvim.QuickfixError
 		for _, m := range errorPat.FindAllSubmatch(stderr.Bytes(), -1) {
-			qfe := vim.QuickfixError{}
+			qfe := nvim.QuickfixError{}
 			qfe.LNum, _ = strconv.Atoi(string(m[2]))
 			qfe.Col, _ = strconv.Atoi(string(m[3]))
 			qfe.Text = string(bytes.TrimSpace(m[4]))
@@ -77,7 +77,7 @@ func format(v *vim.Vim, r [2]int, eval *struct {
 	return err
 }
 
-func minUpdate(v *vim.Vim, b vim.Buffer, in [][]byte, out [][]byte) error {
+func minUpdate(v *nvim.Nvim, b nvim.Buffer, in [][]byte, out [][]byte) error {
 
 	// Find matching head lines.
 

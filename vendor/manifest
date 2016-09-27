@@ -2,16 +2,25 @@
 	"version": 0,
 	"dependencies": [
 		{
-			"importpath": "github.com/neovim-go/msgpack",
-			"repository": "https://github.com/neovim-go/msgpack",
-			"revision": "b8a9f492dc4eaa3c3d58ae6764af642f5331f0d2",
-			"branch": "master"
+			"importpath": "github.com/neovim/go-client/msgpack",
+			"repository": "https://github.com/neovim/go-client",
+			"revision": "f893c1d075915a0c1c7c2196c5e998f1ca2b0232",
+			"branch": "master",
+			"path": "/msgpack"
 		},
 		{
-			"importpath": "github.com/neovim-go/vim",
-			"repository": "https://github.com/neovim-go/vim",
-			"revision": "1e4217641f89197e36ecc0fbcf62d8c07e2d72b7",
-			"branch": "master"
+			"importpath": "github.com/neovim/go-client/nvim",
+			"repository": "https://github.com/neovim/go-client",
+			"revision": "f893c1d075915a0c1c7c2196c5e998f1ca2b0232",
+			"branch": "master",
+			"path": "/nvim"
+		},
+		{
+			"importpath": "github.com/neovim/go-client/nvim/plugin",
+			"repository": "https://github.com/neovim/go-client",
+			"revision": "f893c1d075915a0c1c7c2196c5e998f1ca2b0232",
+			"branch": "master",
+			"path": "/nvim/plugin"
 		},
 		{
 			"importpath": "golang.org/x/tools/go/buildutil",

@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/neovim-go/vim"
+	"github.com/neovim/go-client/nvim"
 )
 
 var minUpdateTests = []struct {
@@ -41,7 +41,7 @@ var minUpdateTests = []struct {
 }
 
 func TestMinUpdate(t *testing.T) {
-	v, err := vim.NewEmbedded(&vim.EmbedOptions{
+	v, err := nvim.NewEmbedded(&nvim.EmbedOptions{
 		Args: []string{"-u", "NONE", "-n"},
 		Env:  []string{},
 		Logf: t.Logf,

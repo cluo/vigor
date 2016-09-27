@@ -15,8 +15,8 @@ import (
 
 	"vigor/context"
 
-	"github.com/neovim-go/vim"
-	"github.com/neovim-go/vim/plugin"
+	"github.com/neovim/go-client/nvim"
+	"github.com/neovim/go-client/nvim/plugin"
 )
 
 var docs = struct {
@@ -36,7 +36,7 @@ func Register(p *plugin.Plugin) {
 	p.Handle("explorer.onJump", onJump)
 }
 
-func expandSpec(v *vim.Vim, spec string) (string, error) {
+func expandSpec(v *nvim.Nvim, spec string) (string, error) {
 	if len(spec) == 0 {
 		return spec, nil
 	}
@@ -47,7 +47,7 @@ func expandSpec(v *vim.Vim, spec string) (string, error) {
 	return spec, err
 }
 
-func onDoc(v *vim.Vim, args []string, eval *struct {
+func onDoc(v *nvim.Nvim, args []string, eval *struct {
 	Env  context.Env
 	Cwd  string `eval:"getcwd()"`
 	Name string `eval:"expand('%')"`
@@ -63,7 +63,7 @@ func onDoc(v *vim.Vim, args []string, eval *struct {
 	}
 
 	ctx := context.Get(&eval.Env)
-	name := bufNamePrefix + resolvePackageSpec(&ctx.Build, eval.Cwd, vim.NewBufferReader(v, 0), spec)
+	name := bufNamePrefix + resolvePackageSpec(&ctx.Build, eval.Cwd, nvim.NewBufferReader(v, 0), spec)
 
 	var cmds []string
 	if name != eval.Name {
@@ -79,7 +79,7 @@ func onDoc(v *vim.Vim, args []string, eval *struct {
 	return v.Command(strings.Join(cmds, " | "))
 }
 
-func onDef(v *vim.Vim, args []string, eval *struct {
+func onDef(v *nvim.Nvim, args []string, eval *struct {
 	Env context.Env
 	Cwd string `eval:"getcwd()"`
 }) error {
@@ -93,7 +93,7 @@ func onDef(v *vim.Vim, args []string, eval *struct {
 	}
 
 	ctx := context.Get(&eval.Env)
-	path := resolvePackageSpec(&ctx.Build, eval.Cwd, vim.NewBufferReader(v, 0), spec)
+	path := resolvePackageSpec(&ctx.Build, eval.Cwd, nvim.NewBufferReader(v, 0), spec)
 
 	var sym string
 	if len(args) >= 2 {
@@ -108,7 +108,7 @@ func onDef(v *vim.Vim, args []string, eval *struct {
 	return v.Command(fmt.Sprintf("edit %s | call cursor([%d, %d])", file, line, col))
 }
 
-func onComplete(v *vim.Vim, a *vim.CommandCompletionArgs, eval *struct {
+func onComplete(v *nvim.Nvim, a *nvim.CommandCompletionArgs, eval *struct {
 	Env context.Env
 	Cwd string `eval:"getcwd()"`
 }) ([]string, error) {
@@ -122,14 +122,14 @@ func onComplete(v *vim.Vim, a *vim.CommandCompletionArgs, eval *struct {
 		if err != nil {
 			return nil, err
 		}
-		completions = completeSymMethodArg(&ctx.Build, resolvePackageSpec(&ctx.Build, eval.Cwd, vim.NewBufferReader(v, 0), spec), a.ArgLead)
+		completions = completeSymMethodArg(&ctx.Build, resolvePackageSpec(&ctx.Build, eval.Cwd, nvim.NewBufferReader(v, 0), spec), a.ArgLead)
 	} else {
-		completions = completePackageArg(&ctx.Build, eval.Cwd, vim.NewBufferReader(v, 0), a.ArgLead)
+		completions = completePackageArg(&ctx.Build, eval.Cwd, nvim.NewBufferReader(v, 0), a.ArgLead)
 	}
 	return completions, nil
 }
 
-func onBufReadCmd(v *vim.Vim, eval *struct {
+func onBufReadCmd(v *nvim.Nvim, eval *struct {
 	Env  context.Env
 	Cwd  string `eval:"getcwd()"`
 	Name string `eval:"expand('%')"`
@@ -195,7 +195,7 @@ func onBufReadCmd(v *vim.Vim, eval *struct {
 	for n, a := range d.anchors {
 		anchors[n] = [2]int{a.line(), a.column()}
 	}
-	p.SetBufferVar(b, "anchors", anchors, nil)
+	p.SetBufferVar(b, "anchors", anchors)
 	p.Command(fmt.Sprintf("nnoremap <buffer> <silent> <CR> :<C-U>call rpcrequest(%d, 'explorer.onJump', %d, line('.'), col('.'))<CR>", channelID, int(b)))
 	p.Command("nnoremap <buffer> <silent> g? :<C-U>help :Godoc<CR>")
 	p.Command(`nnoremap <buffer> <silent> ]] :<C-U>call search('\C\v^[^ \t)}]', 'W')<CR>`)
@@ -211,13 +211,13 @@ func onBufReadCmd(v *vim.Vim, eval *struct {
 	return nil
 }
 
-func onBufDelete(v *vim.Vim, b int) {
+func onBufDelete(v *nvim.Nvim, b int) {
 	docs.Lock()
 	delete(docs.m, b)
 	docs.Unlock()
 }
 
-func onJump(v *vim.Vim, b, line, col int) error {
+func onJump(v *nvim.Nvim, b, line, col int) error {
 	d, link := findLink(b, line, col)
 	if link == nil {
 		return nil
@@ -243,12 +243,12 @@ type windowHighlight struct {
 
 var highlights = struct {
 	sync.Mutex
-	m map[vim.Window]*windowHighlight
+	m map[nvim.Window]*windowHighlight
 }{
-	m: make(map[vim.Window]*windowHighlight),
+	m: make(map[nvim.Window]*windowHighlight),
 }
 
-func onUpdateHighlight(v *vim.Vim, b, line, col int) error {
+func onUpdateHighlight(v *nvim.Nvim, b, line, col int) error {
 
 	_, newLink := findLink(b, line, col)
 
