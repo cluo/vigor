@@ -154,7 +154,7 @@ func completeSymMethodArg(ctx *build.Context, importPath, symMethod string) (com
 	}
 
 	if method != "" {
-		for _, d := range pkg.Doc.Types {
+		for _, d := range pkg.GoDoc.Types {
 			if strings.ToLower(d.Name) == sym {
 				for _, m := range d.Methods {
 					if strings.HasPrefix(strings.ToLower(m.Name), method) {
@@ -164,21 +164,21 @@ func completeSymMethodArg(ctx *build.Context, importPath, symMethod string) (com
 			}
 		}
 	} else {
-		untangleDoc(pkg.Doc)
+		untangleDoc(pkg.GoDoc)
 		add := func(n string) {
 			if strings.HasPrefix(strings.ToLower(n), sym) {
 				completions = append(completions, n)
 			}
 		}
-		for _, d := range append(pkg.Doc.Consts, pkg.Doc.Vars...) {
+		for _, d := range append(pkg.GoDoc.Consts, pkg.GoDoc.Vars...) {
 			for _, n := range d.Names {
 				add(n)
 			}
 		}
-		for _, d := range pkg.Doc.Funcs {
+		for _, d := range pkg.GoDoc.Funcs {
 			add(d.Name)
 		}
-		for _, d := range pkg.Doc.Types {
+		for _, d := range pkg.GoDoc.Types {
 			add(d.Name + ".")
 		}
 	}

@@ -23,6 +23,7 @@ var minUpdateTests = []struct {
 	{"a", "x"},
 	{"a/b/c", "x/y/z"},
 
+	{"a//b", "a///b"},
 	{"a/b/c/d", "a/b/c/d"},
 	{"b/c/d", "a/b/c/d"},
 	{"a/b/c", "a/b/c/d"},

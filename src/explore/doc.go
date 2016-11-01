@@ -22,75 +22,27 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/garyburd/vigor/src/doc"
 )
 
 const (
 	headerGroup  = "Constant"
 	commentGroup = "Comment"
 	declGroup    = "Special"
-
-	textIndent = "    "
-	textWidth  = 80 - len(textIndent)
+	textIndent   = "    "
+	textWidth    = 80 - len(textIndent)
 )
-
-// position encodes a line and column as a single integer
-type position int
-
-func (p position) line() int {
-	return int(p / 10000)
-}
-
-func (p position) column() int {
-	return int(p % 10000)
-}
-
-func newPosition(line, column int) position {
-	return position(line*10000 + column)
-}
-
-// link represents a link in the document.
-type link struct {
-	// Start and end of link.
-	start, end position
-
-	// Path is index of the target file path in doc.strings.
-	path int
-
-	// Target specifies the position in the target file.
-	address position
-}
 
 // bufNamePrefix specifies the file name prefix for documentation pages.
 const bufNamePrefix = "godoc://"
 
-// highlight represents a range of text in Doc.Text to be highlighted.
-type highlight struct {
-	// Start and end of highlight range.
-	start, end position
-
-	// Vim highlight group name.
-	group string
-}
-
-// documentation represents a documentation page.
-type doc struct {
-	importPath string
-	links      []*link
-	anchors    map[string]position
-	strings    []string
-	folds      [][2]position
-	highlights []*highlight
-	text       []byte
-}
-
 // printDoc prints the documentation for the given import path.
-func printDoc(ctx *build.Context, path string, cwd string) (*doc, error) {
+func printDoc(ctx *build.Context, path string, cwd string) (*doc.Doc, error) {
 	importPath := strings.TrimPrefix(path, bufNamePrefix)
 	p := docPrinter{
-		lineNum:    1,
-		lineOffset: -1,
-		doc:        &doc{importPath: importPath, anchors: make(map[string]position)},
-		index:      make(map[string]int),
+		Doc:        doc.NewDoc(),
+		importPath: importPath,
 	}
 	if importPath != "" {
 		pkg, err := loadPackage(ctx, importPath, cwd, loadPackageDoc|loadPackageExamples|loadPackageFixVendor)
@@ -102,80 +54,65 @@ func printDoc(ctx *build.Context, path string, cwd string) (*doc, error) {
 	return p.execute()
 }
 
-type hlStackItem struct {
-	start position
-	group string
-}
-
 // docPrinter holds state used to create a documentation page.
 type docPrinter struct {
 	*pkg
-	doc *doc
-
-	buf       bytes.Buffer
-	scratch   bytes.Buffer
-	index     map[string]int
-	hlStack   []hlStackItem
-	foldStack []position
-	linkStart position
-
-	// Fields used by outputPosition
-	lineNum    int
-	lineOffset int
-	scanOffset int
+	*doc.Doc
+	importPath string
+	scratch    bytes.Buffer
 }
 
-func (p *docPrinter) execute() (*doc, error) {
+func (p *docPrinter) execute() (*doc.Doc, error) {
 	printDecls := false
 
 	switch {
-	case p.doc.importPath == "":
+	case p.importPath == "":
 		// root
-	case p.Doc == nil:
-		p.pushHighlight(headerGroup)
-		p.buf.WriteString("Directory ")
-		p.printLink(p.Build.ImportPath, p.Build.Dir, -1)
-		p.popHighlight()
-		p.buf.WriteString("\n\n")
-	case p.Doc.Name == "main":
-		p.pushHighlight(headerGroup)
-		p.buf.WriteString("Command ")
-		p.printLink(path.Base(p.Build.ImportPath), p.Build.Dir, -1)
-		p.popHighlight()
-		p.buf.WriteString("\n\n")
-		p.printText(p.Doc.Doc)
+	case p.GoDoc == nil:
+		p.PushHighlight(headerGroup)
+		p.WriteString("Directory ")
+		p.WriteLinkAnchor(p.Build.ImportPath, p.Build.Dir, "")
+		p.PopHighlight()
+		p.WriteString("\n\n")
+	case p.GoDoc.Name == "main":
+		p.PushHighlight(headerGroup)
+		p.WriteString("Command ")
+		p.WriteLinkAnchor(path.Base(p.Build.ImportPath), p.Build.Dir, "")
+		p.PopHighlight()
+		p.WriteString("\n\n")
+		p.printText(p.GoDoc.Doc)
 	default:
-		p.pushHighlight(declGroup)
-		p.buf.WriteString("package ")
-		p.printLink(p.Doc.Name, p.Build.Dir, -1)
-		p.pushHighlight(commentGroup)
-		fmt.Fprintf(&p.buf, " // import \"%s\"\n\n", p.Build.ImportPath)
-		p.popHighlight()
-		p.popHighlight()
-		p.printText(p.Doc.Doc)
+		p.PushHighlight(declGroup)
+		p.WriteString("package ")
+		p.WriteLinkAnchor(p.GoDoc.Name, p.Build.Dir, "")
+		p.PushHighlight(commentGroup)
+		fmt.Fprintf(p.Doc, " // import \"%s\"\n\n", p.Build.ImportPath)
+		p.PopHighlight()
+		p.PopHighlight()
+		p.printText(p.GoDoc.Doc)
 		p.printExamples("")
 		printDecls = true
 	}
 
 	if printDecls {
-		if len(p.Doc.Consts) > 0 {
+		if len(p.GoDoc.Consts) > 0 {
 			p.printHeader("Constants")
-			p.printValues(p.Doc.Consts)
+			p.printValues(p.GoDoc.Consts)
 		}
 
-		if len(p.Doc.Vars) > 0 {
+		if len(p.GoDoc.Vars) > 0 {
 			p.printHeader("Variables")
-			p.printValues(p.Doc.Vars)
+			p.printValues(p.GoDoc.Vars)
 		}
 
-		if len(p.Doc.Funcs) > 0 {
+		if len(p.GoDoc.Funcs) > 0 {
 			p.printHeader("Functions")
-			p.printFuncs(p.Doc.Funcs, "")
+			p.printFuncs(p.GoDoc.Funcs, "")
 		}
 
-		if len(p.Doc.Types) > 0 {
+		if len(p.GoDoc.Types) > 0 {
 			p.printHeader("Types")
-			for _, d := range p.Doc.Types {
+			for _, d := range p.GoDoc.Types {
 				p.printDecl(d.Decl)
 				p.printText(d.Doc)
 				p.printExamples(d.Name)
@@ -189,15 +126,14 @@ func (p *docPrinter) execute() (*doc, error) {
 		p.printImports()
 	}
 
-	if p.doc.importPath == "" {
+	if p.importPath == "" {
 		p.printDirs("Standard Packages", []string{build.Default.GOROOT})
 		p.printDirs("Third Party Packages", filepath.SplitList(build.Default.GOPATH))
 	} else {
 		p.printDirs("Directories", append(filepath.SplitList(build.Default.GOPATH), build.Default.GOROOT))
 	}
 
-	p.doc.text = p.buf.Bytes()
-	return p.doc, nil
+	return p.Doc, nil
 }
 
 const (
@@ -224,7 +160,7 @@ func (p *docPrinter) printDecl(decl ast.Decl) {
 		p.FSet,
 		&printer.CommentedNode{Node: decl, Comments: v.comments})
 	if err != nil {
-		p.buf.WriteString(err.Error())
+		p.WriteString(err.Error())
 		return
 	}
 	buf := bytes.TrimRight(p.scratch.Bytes(), " \t\n")
@@ -235,8 +171,8 @@ func (p *docPrinter) printDecl(decl ast.Decl) {
 	base := file.Base()
 	s.Init(file, buf, nil, scanner.ScanComments)
 	lastOffset := 0
-	p.pushHighlight(declGroup)
-	defer p.popHighlight()
+	p.PushHighlight(declGroup)
+	defer p.PopHighlight()
 loop:
 	for {
 		pos, tok, lit := s.Scan()
@@ -245,50 +181,53 @@ loop:
 			break loop
 		case token.COMMENT:
 			offset := int(pos) - base
-			p.buf.Write(buf[lastOffset:offset])
+			p.Write(buf[lastOffset:offset])
 			lastOffset = offset + len(lit)
-			p.pushHighlight(commentGroup)
-			p.buf.WriteString(lit)
-			p.popHighlight()
+			p.PushHighlight(commentGroup)
+			p.WriteString(lit)
+			p.PopHighlight()
 		case token.IDENT:
 			if len(v.annotations) == 0 {
 				// Oops!
 				break loop
 			}
 			offset := int(pos) - base
-			p.buf.Write(buf[lastOffset:offset])
+			p.Write(buf[lastOffset:offset])
 			lastOffset = offset + len(lit)
 			a := v.annotations[0]
 			v.annotations = v.annotations[1:]
 			switch a.kind {
 			case startLinkAnnotation:
-				p.beginLink()
-				p.buf.WriteString(lit)
-			case linkAnnotation:
-				p.beginLink()
-				fallthrough
-			case endLinkAnnotation:
 				file := ""
 				if a.data != "" {
 					file = bufNamePrefix + a.data
 				}
-				p.buf.WriteString(lit)
-				p.endLink(file, newPosition(0, p.stringIndex(lit)))
+				p.PushLinkAnchor(file, v.annotations[0].data)
+				p.WriteString(lit)
+			case endLinkAnnotation:
+				p.WriteString(lit)
+				p.PopLink()
+			case linkAnnotation:
+				file := ""
+				if a.data != "" {
+					file = bufNamePrefix + a.data
+				}
+				p.WriteLinkAnchor(lit, file, lit)
 			case packageLinkAnnoation:
-				p.printLink(lit, bufNamePrefix+a.data, -1)
+				p.WriteLinkAnchor(lit, bufNamePrefix+a.data, "")
 			case anchorAnnotation:
 				p.addAnchor(lit, a.data)
 				pos := p.FSet.Position(a.pos)
-				p.printLink(lit,
+				p.WriteLink(lit,
 					filepath.Join(p.Build.Dir, pos.Filename),
-					newPosition(pos.Line, pos.Column))
+					pos.Line, pos.Column)
 			default:
-				p.buf.WriteString(lit)
+				p.WriteString(lit)
 			}
 		}
 	}
-	p.buf.Write(buf[lastOffset:])
-	p.buf.WriteString("\n\n")
+	p.Write(buf[lastOffset:])
+	p.WriteString("\n\n")
 }
 
 func (p *docPrinter) printText(s string) {
@@ -303,22 +242,22 @@ func (p *docPrinter) printText(s string) {
 			} else {
 				const k = len(textIndent) + 1
 				if blank == 2 && len(line) > k && line[k] != ' ' {
-					p.buf.WriteByte('\n')
-					p.pushHighlight(headerGroup)
-					p.buf.Write(line)
-					p.popHighlight()
-					p.buf.WriteByte('\n')
+					p.WriteString("\n")
+					p.PushHighlight(headerGroup)
+					p.Write(line)
+					p.PopHighlight()
+					p.WriteString("\n")
 				} else {
 					for i := 0; i < blank; i++ {
-						p.buf.WriteByte('\n')
+						p.WriteString("\n")
 					}
-					p.buf.Write(line)
-					p.buf.WriteByte('\n')
+					p.Write(line)
+					p.WriteString("\n")
 				}
 				blank = 0
 			}
 		}
-		p.buf.WriteByte('\n')
+		p.WriteString("\n")
 	}
 }
 
@@ -394,24 +333,24 @@ func (p *docPrinter) printFiles(sets ...[]string) {
 	sort.Strings(fnames)
 
 	col := 0
-	p.buf.WriteByte('\n')
-	p.buf.WriteString(textIndent)
+	p.WriteString("\n")
+	p.WriteString(textIndent)
 	for _, fname := range fnames {
 		n := utf8.RuneCountInString(fname)
 		if col != 0 {
 			if col+n+3 > textWidth {
 				col = 0
-				p.buf.WriteByte('\n')
-				p.buf.WriteString(textIndent)
+				p.WriteString("\n")
+				p.WriteString(textIndent)
 			} else {
 				col += 1
-				p.buf.WriteByte(' ')
+				p.WriteString(" ")
 			}
 		}
-		p.printLink(fname, filepath.Join(p.Build.Dir, fname), -1)
+		p.WriteLinkAnchor(fname, filepath.Join(p.Build.Dir, fname), "")
 		col += n + 2
 	}
-	p.buf.WriteString("\n")
+	p.WriteString("\n")
 }
 
 func (p *docPrinter) printValues(values []*godoc.Value) {
@@ -435,19 +374,17 @@ func (p *docPrinter) printImports() {
 	}
 	p.printHeader("Imports")
 	for _, imp := range p.Build.Imports {
-		p.buf.WriteString(textIndent)
-		p.beginLink()
-		p.buf.WriteString(imp)
-		p.endLink(bufNamePrefix+imp, -1)
-		p.buf.WriteByte('\n')
+		p.WriteString(textIndent)
+		p.WriteLinkAnchor(imp, bufNamePrefix+imp, "")
+		p.WriteString("\n")
 	}
-	p.buf.WriteString("\n")
+	p.WriteString("\n")
 }
 
 func (p *docPrinter) printDirs(header string, roots []string) {
 	m := map[string]bool{}
 	for _, root := range roots {
-		dir := filepath.Join(root, "src", filepath.FromSlash(p.doc.importPath))
+		dir := filepath.Join(root, "src", filepath.FromSlash(p.importPath))
 		fis, err := ioutil.ReadDir(dir)
 		if err != nil {
 			continue
@@ -460,7 +397,7 @@ func (p *docPrinter) printDirs(header string, roots []string) {
 		}
 	}
 
-	if len(m) == 0 && p.doc.importPath == "" {
+	if len(m) == 0 && p.importPath == "" {
 		return
 	}
 
@@ -471,106 +408,35 @@ func (p *docPrinter) printDirs(header string, roots []string) {
 	sort.Strings(names)
 
 	p.printHeader(header)
-	if p.doc.importPath != "" {
-		up := path.Dir(p.doc.importPath)
+	if p.importPath != "" {
+		up := path.Dir(p.importPath)
 		if up == "." {
 			up = ""
 		}
-		p.buf.WriteString(textIndent)
-		p.printLink(".. (up a directory)", bufNamePrefix+up, -1)
-		p.buf.WriteByte('\n')
+		p.WriteString(textIndent)
+		p.WriteLinkAnchor(".. (up a directory)", bufNamePrefix+up, "")
+		p.WriteString("\n")
 	}
 	for _, name := range names {
-		p.buf.WriteString(textIndent)
-		p.beginLink()
-		p.buf.WriteString(name)
-		p.endLink(bufNamePrefix+path.Join(p.doc.importPath, name), -1)
-		p.buf.WriteByte('\n')
+		p.WriteString(textIndent)
+		p.WriteLinkAnchor(name, bufNamePrefix+path.Join(p.importPath, name), "")
+		p.WriteString("\n")
 	}
-	p.buf.WriteByte('\n')
+	p.WriteString("\n")
 }
 
 func (p *docPrinter) printHeader(s string) {
-	p.pushHighlight(headerGroup)
-	p.buf.WriteString(strings.ToUpper(s))
-	p.popHighlight()
-	p.buf.WriteString("\n\n")
-}
-
-func (p *docPrinter) printLink(s string, file string, address position) {
-	p.beginLink()
-	p.buf.WriteString(s)
-	p.endLink(file, address)
-}
-
-func (p *docPrinter) beginLink() {
-	p.linkStart = p.outputPosition()
-}
-
-func (p *docPrinter) endLink(file string, address position) {
-	p.doc.links = append(p.doc.links, &link{start: p.linkStart, end: p.outputPosition(), path: p.stringIndex(file), address: address})
-}
-
-func (p *docPrinter) pushHighlight(group string) {
-	start := p.outputPosition()
-	if len(p.hlStack) > 0 {
-		hl := p.hlStack[len(p.hlStack)-1]
-		if hl.start != start {
-			p.doc.highlights = append(p.doc.highlights, &highlight{start: hl.start, end: start, group: hl.group})
-		}
-	}
-	p.hlStack = append(p.hlStack, hlStackItem{start, group})
-}
-
-func (p *docPrinter) popHighlight() {
-	hl := p.hlStack[len(p.hlStack)-1]
-	p.hlStack = p.hlStack[:len(p.hlStack)-1]
-	end := p.outputPosition()
-	if hl.start != end {
-		p.doc.highlights = append(p.doc.highlights, &highlight{start: hl.start, end: end, group: hl.group})
-	}
-	if len(p.hlStack) > 0 {
-		p.hlStack[len(p.hlStack)-1].start = end
-	}
-}
-
-func (p *docPrinter) pushFold() {
-	p.foldStack = append(p.foldStack, p.outputPosition())
-}
-
-func (p *docPrinter) popFold() {
-	start := p.foldStack[len(p.foldStack)-1]
-	p.foldStack = p.foldStack[:len(p.foldStack)-1]
-	p.doc.folds = append(p.doc.folds, [2]position{start, p.outputPosition()})
+	p.PushHighlight(headerGroup)
+	p.WriteString(strings.ToUpper(s))
+	p.PopHighlight()
+	p.WriteString("\n\n")
 }
 
 func (p *docPrinter) addAnchor(name, typeName string) {
 	if typeName != "" {
 		name = typeName + "." + name
 	}
-	p.doc.anchors[name] = p.outputPosition()
-}
-
-func (p *docPrinter) stringIndex(s string) int {
-	if i, ok := p.index[s]; ok {
-		return i
-	}
-	i := len(p.index)
-	p.index[s] = i
-	p.doc.strings = append(p.doc.strings, s)
-	return i
-}
-
-func (p *docPrinter) outputPosition() position {
-	b := p.buf.Bytes()
-	for i, c := range b[p.scanOffset:] {
-		if c == '\n' {
-			p.lineNum += 1
-			p.lineOffset = p.scanOffset + i
-		}
-	}
-	p.scanOffset = len(b)
-	return newPosition(p.lineNum, len(b)-p.lineOffset)
+	p.Doc.AddAnchor(name)
 }
 
 const (
@@ -631,8 +497,8 @@ type declVisitor struct {
 	comments    []*ast.CommentGroup
 }
 
-func (v *declVisitor) addAnnoation(kind int, data string, pos token.Pos) {
-	v.annotations = append(v.annotations, &annotation{kind: kind, data: data, pos: pos})
+func (v *declVisitor) addAnnoation(a *annotation) {
+	v.annotations = append(v.annotations, a)
 }
 
 func (v *declVisitor) ignoreName() {
@@ -642,20 +508,20 @@ func (v *declVisitor) ignoreName() {
 func (v *declVisitor) Visit(n ast.Node) ast.Visitor {
 	switch n := n.(type) {
 	case *ast.TypeSpec:
-		v.addAnnoation(anchorAnnotation, "", n.Pos())
+		v.addAnnoation(&annotation{kind: anchorAnnotation, pos: n.Pos()})
 		name := n.Name.Name
 		switch n := n.Type.(type) {
 		case *ast.InterfaceType:
 			for _, f := range n.Methods.List {
 				for _, n := range f.Names {
-					v.addAnnoation(anchorAnnotation, name, n.Pos())
+					v.addAnnoation(&annotation{kind: anchorAnnotation, data: name, pos: n.Pos()})
 				}
 				ast.Walk(v, f.Type)
 			}
 		case *ast.StructType:
 			for _, f := range n.Fields.List {
 				for _, n := range f.Names {
-					v.addAnnoation(anchorAnnotation, name, n.Pos())
+					v.addAnnoation(&annotation{kind: anchorAnnotation, data: name, pos: n.Pos()})
 				}
 				ast.Walk(v, f.Type)
 			}
@@ -664,7 +530,7 @@ func (v *declVisitor) Visit(n ast.Node) ast.Visitor {
 		}
 	case *ast.FuncDecl:
 		if n.Recv == nil {
-			v.addAnnoation(anchorAnnotation, "", n.Name.NamePos)
+			v.addAnnoation(&annotation{kind: anchorAnnotation, pos: n.Name.NamePos})
 		} else {
 			ast.Walk(v, n.Recv)
 			if len(n.Recv.List) > 0 {
@@ -673,7 +539,7 @@ func (v *declVisitor) Visit(n ast.Node) ast.Visitor {
 					typ = se.X
 				}
 				if id, ok := typ.(*ast.Ident); ok {
-					v.addAnnoation(anchorAnnotation, id.Name, n.Name.NamePos)
+					v.addAnnoation(&annotation{kind: anchorAnnotation, data: id.Name, pos: n.Name.NamePos})
 				}
 			}
 		}
@@ -686,7 +552,7 @@ func (v *declVisitor) Visit(n ast.Node) ast.Visitor {
 		ast.Walk(v, n.Type)
 	case *ast.ValueSpec:
 		for _, n := range n.Names {
-			v.addAnnoation(anchorAnnotation, "", n.Pos())
+			v.addAnnoation(&annotation{kind: anchorAnnotation, pos: n.Pos()})
 		}
 		if n.Type != nil {
 			ast.Walk(v, n.Type)
@@ -697,9 +563,9 @@ func (v *declVisitor) Visit(n ast.Node) ast.Visitor {
 	case *ast.Ident:
 		switch {
 		case n.Obj == nil && predeclared[n.Name] != notPredeclared:
-			v.addAnnoation(linkAnnotation, "builtin", 0)
+			v.addAnnoation(&annotation{kind: linkAnnotation, data: "builtin"})
 		case n.Obj != nil && ast.IsExported(n.Name):
-			v.addAnnoation(linkAnnotation, "", 0)
+			v.addAnnoation(&annotation{kind: linkAnnotation})
 		default:
 			v.ignoreName()
 		}
@@ -712,11 +578,11 @@ func (v *declVisitor) Visit(n ast.Node) ast.Visitor {
 							v.ignoreName()
 							v.ignoreName()
 						} else if n.Sel.Pos()-x.End() == 1 {
-							v.addAnnoation(startLinkAnnotation, path, 0)
-							v.addAnnoation(endLinkAnnotation, path, 0)
+							v.addAnnoation(&annotation{kind: startLinkAnnotation, data: path})
+							v.addAnnoation(&annotation{kind: endLinkAnnotation, data: n.Sel.Name})
 						} else {
-							v.addAnnoation(packageLinkAnnoation, path, 0)
-							v.addAnnoation(linkAnnotation, path, 0)
+							v.addAnnoation(&annotation{kind: packageLinkAnnoation, data: path})
+							v.addAnnoation(&annotation{kind: linkAnnotation, data: path})
 						}
 						return nil
 					}

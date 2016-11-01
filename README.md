@@ -8,9 +8,10 @@ See [the help file](https://github.com/garyburd/vigor/blob/master/doc/vigor.txt)
 
 ### Install
 
-1. Install this repo using a Vim plugin manager.
-1. [Install gb](http://getgb.io/docs/install/).
-1. Change directory to the Vigor plugin directory and run the commands:
+Install this repository using a Vim plugin manager.
 
-        gb vendor restore
-        gb build
+Install the helper program:
+
+    go get github.com/garyburd/vigor/src/cmd/vigor
+
+The plugin and the vigor command are tightly coupled. Update both at the same time.

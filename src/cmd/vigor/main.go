@@ -6,8 +6,8 @@
 package main
 
 import (
-	"vigor/explore"
-	"vigor/format"
+	"github.com/garyburd/vigor/src/explore"
+	"github.com/garyburd/vigor/src/format"
 
 	"github.com/neovim/go-client/nvim/plugin"
 )

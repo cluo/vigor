@@ -12,7 +12,7 @@ import (
 	"regexp"
 	"strconv"
 
-	"vigor/context"
+	"github.com/garyburd/vigor/src/context"
 
 	"github.com/neovim/go-client/nvim"
 	"github.com/neovim/go-client/nvim/plugin"
@@ -25,24 +25,19 @@ func Register(p *plugin.Plugin) {
 var errorPat = regexp.MustCompile(`^([^:]+):(\d+)(?::(\d+))?(.*)`)
 
 func format(v *nvim.Nvim, r [2]int, eval *struct {
-	Env context.Env
+	Env   context.Env
+	Bufnr int `eval:"bufnr('%')"`
 }) error {
-
-	b, err := v.CurrentBuffer()
-	if err != nil {
-		return err
-	}
-
 	var (
 		in    [][]byte
-		bufnr int
 		fname string
 	)
-	p := v.NewPipeline()
-	p.BufferLines(b, 0, -1, true, &in)
-	p.BufferNumber(b, &bufnr)
-	p.BufferName(b, &fname)
-	if err := p.Wait(); err != nil {
+	buf := nvim.Buffer(eval.Bufnr)
+
+	b := v.NewBatch()
+	b.BufferLines(buf, 0, -1, true, &in)
+	b.BufferName(buf, &fname)
+	if err := b.Execute(); err != nil {
 		return nil
 	}
 
@@ -52,10 +47,10 @@ func format(v *nvim.Nvim, r [2]int, eval *struct {
 	c.Stdout = &stdout
 	c.Stderr = &stderr
 	c.Env = context.Get(&eval.Env).Environ
-	err = c.Run()
+	err := c.Run()
 	if err == nil {
 		out := bytes.Split(bytes.TrimSuffix(stdout.Bytes(), []byte{'\n'}), []byte{'\n'})
-		return minUpdate(v, b, in, out)
+		return minUpdate(v, buf, in, out)
 	}
 	if _, ok := err.(*exec.ExitError); ok {
 		var qfl []*nvim.QuickfixError
@@ -64,14 +59,14 @@ func format(v *nvim.Nvim, r [2]int, eval *struct {
 			qfe.LNum, _ = strconv.Atoi(string(m[2]))
 			qfe.Col, _ = strconv.Atoi(string(m[3]))
 			qfe.Text = string(bytes.TrimSpace(m[4]))
-			qfe.Bufnr = bufnr
+			qfe.Bufnr = eval.Bufnr
 			qfl = append(qfl, &qfe)
 		}
 		if len(qfl) > 0 {
-			p := v.NewPipeline()
-			p.Call("setqflist", nil, qfl)
-			p.Command("cc")
-			return p.Wait()
+			b := v.NewBatch()
+			b.Call("setqflist", nil, qfl)
+			b.Command("cc")
+			return b.Execute()
 		}
 	}
 	return err

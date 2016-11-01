@@ -18,12 +18,12 @@ func findDef(ctx *build.Context, cwd, importPath, symbol string) (string, int, i
 	if err != nil {
 		return "", 0, 0, err
 	}
-	if pkg.Doc == nil || symbol == "" {
+	if pkg.GoDoc == nil || symbol == "" {
 		return pkg.Build.Dir, 0, 0, nil
 	}
 	parts := strings.Split(symbol, ".")
 	if len(parts) == 2 {
-		for _, d := range pkg.Doc.Types {
+		for _, d := range pkg.GoDoc.Types {
 			if d.Name == parts[0] {
 				for _, m := range d.Methods {
 					if m.Name == parts[1] {
@@ -34,8 +34,8 @@ func findDef(ctx *build.Context, cwd, importPath, symbol string) (string, int, i
 			}
 		}
 	} else {
-		untangleDoc(pkg.Doc)
-		for _, d := range [][]*godoc.Value{pkg.Doc.Consts, pkg.Doc.Vars} {
+		untangleDoc(pkg.GoDoc)
+		for _, d := range [][]*godoc.Value{pkg.GoDoc.Consts, pkg.GoDoc.Vars} {
 			for _, d := range d {
 				for _, name := range d.Names {
 					if name == symbol {
@@ -44,12 +44,12 @@ func findDef(ctx *build.Context, cwd, importPath, symbol string) (string, int, i
 				}
 			}
 		}
-		for _, d := range pkg.Doc.Funcs {
+		for _, d := range pkg.GoDoc.Funcs {
 			if d.Name == symbol {
 				return declPosition(pkg, d.Decl)
 			}
 		}
-		for _, d := range pkg.Doc.Types {
+		for _, d := range pkg.GoDoc.Types {
 			if d.Name == symbol {
 				return declPosition(pkg, d.Decl)
 			}

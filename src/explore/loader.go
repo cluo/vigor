@@ -21,7 +21,7 @@ type pkg struct {
 	FSet     *token.FileSet
 	Build    *build.Package
 	AST      *ast.Package
-	Doc      *godoc.Package
+	GoDoc    *godoc.Package
 	Examples []*godoc.Example
 	Errors   []error
 }
@@ -82,13 +82,13 @@ func loadPackage(ctx *build.Context, importPath string, srcDir string, flags int
 		if pkg.Build.ImportPath == "builtin" || flags&loadPackageUnexported != 0 {
 			mode |= godoc.AllDecls
 		}
-		pkg.Doc = godoc.New(pkg.AST, pkg.Build.ImportPath, mode)
+		pkg.GoDoc = godoc.New(pkg.AST, pkg.Build.ImportPath, mode)
 		if pkg.Build.ImportPath == "builtin" {
-			for _, t := range pkg.Doc.Types {
-				pkg.Doc.Funcs = append(pkg.Doc.Funcs, t.Funcs...)
+			for _, t := range pkg.GoDoc.Types {
+				pkg.GoDoc.Funcs = append(pkg.GoDoc.Funcs, t.Funcs...)
 				t.Funcs = nil
 			}
-			sort.Sort(byFuncName(pkg.Doc.Funcs))
+			sort.Sort(byFuncName(pkg.GoDoc.Funcs))
 		}
 	}
 

@@ -8,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	"vigor/context"
+	"github.com/garyburd/vigor/src/context"
 )
 
 var docTests = []string{
